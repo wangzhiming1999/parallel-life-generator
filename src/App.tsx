@@ -20,6 +20,8 @@ export default function App() {
   const [savedRun, setSavedRun] = useState<BranchRunState | null>(null)
   /** 幕间过渡：选择后短暂淡出再进入下一幕 */
   const [transitioning, setTransitioning] = useState(false)
+  /** 本次会话是否从存档恢复（影响岔路口文案） */
+  const [resumed, setResumed] = useState(false)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const music = useAmbientMusic()
@@ -28,7 +30,12 @@ export default function App() {
     saveBranchRun(state)
   }, [])
 
-  const branch = useBranch({ onRunDone: handleRunDone })
+  // 每幕完成即落盘，刷新后从当前岔路口恢复，进度不丢
+  const handleSnapshot = useCallback((state: BranchRunState) => {
+    saveBranchRun(state)
+  }, [])
+
+  const branch = useBranch({ onRunDone: handleRunDone, onSnapshot: handleSnapshot })
 
   // 刷新后恢复存档入口
   useEffect(() => {
@@ -41,6 +48,7 @@ export default function App() {
     if (!canSubmit) return
     clearBranchRun()
     setSavedRun(null)
+    setResumed(false)
     branch.startRun({ assumption: assumption.trim(), age, occupation, personality })
   }
 
@@ -87,6 +95,7 @@ export default function App() {
     branch.reset()
     clearBranchRun()
     setSavedRun(null)
+    setResumed(false)
     setView('input')
   }
 
@@ -94,6 +103,7 @@ export default function App() {
     if (!savedRun) return
     // 存档已完成整局 → 直接展示；未完成 → 恢复到断点
     branch.resume(savedRun)
+    setResumed(true)
     setView('story')
   }
 
@@ -264,7 +274,7 @@ export default function App() {
             {branch.phase === 'done' && branch.choices && !isFinalDone && (
               <div className="choice-zone">
                 <p className="text-center text-[13px] mb-4" style={{ color: 'var(--color-ink-secondary)' }}>
-                  岔路口到了，你的选择是——
+                  {resumed ? '从这里继续，你的选择是——' : '岔路口到了，你的选择是——'}
                 </p>
                 <div className="flex flex-col gap-3 mb-10">
                   {branch.choices.map((c, i) => (
@@ -278,6 +288,22 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* 死寂兜底：done 但既无选项也无结局（异常态），给重试出路 */}
+            {branch.phase === 'done' && !branch.choices && !isFinalDone && (
+              <div className="text-center mb-10">
+                <p className="text-[14px] mb-4" style={{ color: 'var(--color-ink-secondary)' }}>
+                  这一段人生走完了，但岔路口没亮起来。
+                </p>
+                <button
+                  onClick={handleAnother}
+                  className="text-[14px] bg-transparent cursor-pointer"
+                  style={{ color: 'var(--color-primary-strong)', border: 'none' }}
+                >
+                  重新开启一段人生
+                </button>
               </div>
             )}
 

@@ -11,6 +11,8 @@ const STREAM_IDLE_TIMEOUT_MS = 10_000
 interface UseBranchOptions {
   onSceneDone?: (sceneData: SceneData) => void
   onRunDone?: (state: BranchRunState) => void
+  /** 任一幕完成后的最新快照（用于每幕落盘，断点续传不失进度） */
+  onSnapshot?: (state: BranchRunState) => void
 }
 
 export interface BranchState {
@@ -30,7 +32,7 @@ export interface BranchState {
   scene: number
 }
 
-export function useBranch({ onSceneDone, onRunDone }: UseBranchOptions = {}) {
+export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptions = {}) {
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState('')
   const [paragraphs, setParagraphs] = useState<string[]>([])
@@ -208,7 +210,19 @@ export function useBranch({ onSceneDone, onRunDone }: UseBranchOptions = {}) {
         setPhase('done')
         onSceneDone?.(sceneData)
 
-        // 结局幕：触发整局完成
+        // 每幕完成都落盘快照（含 choices），刷新后可从当前幕的岔路口恢复
+        onSnapshot?.({
+          assumption: ctx.assumption,
+          age: ctx.age,
+          occupation: ctx.occupation,
+          personality: ctx.personality,
+          scenes: nextScenes,
+          path: ctx.path,
+          createdAt: Date.now(),
+          version: 2,
+        })
+
+        // 结局幕：额外触发整局完成
         if (targetScene === TOTAL_SCENES) {
           const runState: BranchRunState = {
             assumption: ctx.assumption,
@@ -280,7 +294,12 @@ export function useBranch({ onSceneDone, onRunDone }: UseBranchOptions = {}) {
     if (lastScene) {
       setSceneNum(lastScene.scene)
       setParagraphs(lastScene.paragraphs)
-      setChoices(lastScene.choices)
+      // 恢复岔路口选项：老存档可能缺 choices 字段，为非结局幕补一个安全提示选项
+      if (lastScene.scene < TOTAL_SCENES && !lastScene.choices) {
+        setChoices(['继续走这条路', '换一条路试试'])
+      } else {
+        setChoices(lastScene.choices)
+      }
       setInsight(lastScene.insight ?? '')
     }
     setPhase('done')
