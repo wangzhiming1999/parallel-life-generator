@@ -1,18 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type AmbientScene = 'input' | 'generating' | 'result'
+export type AmbientScene = 'input' | 'opening' | 'departure' | 'crossroads' | 'settling' | 'reflection' | 'result'
 
 /**
  * 场景曲库：全部 Pixabay License（免费商用、免署名）。
  * CDN 直链已验证可跨域（Access-Control-Allow-Origin: *），支持循环与淡入淡出。
  */
 const TRACKS: Record<AmbientScene, { src: string; name: string }[]> = {
-  // 输入页：温柔钢琴，夜色般宁静（Forest Lullaby - Lesfm）
   input: [{ src: 'https://cdn.pixabay.com/audio/2022/05/05/audio_1395e7800f.mp3', name: 'Forest Lullaby' }],
-  // 生成中：氛围电子，轻微呼吸推进感（Moment - Sascha Ende）
-  generating: [{ src: 'https://cdn.pixabay.com/audio/2022/01/11/audio_b21d9d6fa6.mp3', name: 'Moment' }],
-  // 结果页：极简钢琴+弦乐，温暖沉淀（Ambient Piano & Strings - Lexin_Music）
+  opening: [{ src: 'https://cdn.pixabay.com/audio/2022/07/04/audio_477fb4c391.mp3', name: 'Sunrise' }],
+  departure: [{ src: 'https://cdn.pixabay.com/audio/2022/01/11/audio_b21d9d6fa6.mp3', name: 'Moment' }],
+  crossroads: [{ src: 'https://cdn.pixabay.com/audio/2022/08/02/audio_884fe92c21.mp3', name: 'Inspiring Cinematic Ambient' }],
+  settling: [{ src: 'https://cdn.pixabay.com/audio/2022/11/23/audio_af8f60c3a6.mp3', name: 'Deep in the Dell' }],
+  reflection: [{ src: 'https://cdn.pixabay.com/audio/2022/11/11/audio_84306ee149.mp3', name: 'Please Calm My Mind' }],
   result: [{ src: 'https://cdn.pixabay.com/audio/2021/11/13/audio_cb4f1212a9.mp3', name: 'Ambient Piano' }],
+}
+
+export function ambientSceneForLife(scene: number, isFinal = false): AmbientScene {
+  if (isFinal) return 'result'
+  if (scene <= 3) return 'opening'
+  if (scene <= 6) return 'departure'
+  if (scene <= 10) return 'crossroads'
+  if (scene <= 14) return 'settling'
+  return 'reflection'
 }
 
 // 统一音量（背景乐不宜喧宾夺主）
@@ -111,8 +121,8 @@ export function useAmbientMusic() {
   /** 必须直接从点击事件调用，借用户手势通过浏览器的自动播放限制。 */
   const start = useCallback(() => {
     const el = getAudio()
-    sceneRef.current = 'generating'
-    el.src = TRACKS.generating[0].src
+    sceneRef.current = 'opening'
+    el.src = TRACKS.opening[0].src
     el.volume = 0
     setEnabled(true)
     void el.play()

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBranch } from './hooks/useBranch'
-import { useAmbientMusic, AmbientMusicButton, type AmbientScene } from './hooks/useAmbientMusic'
+import { ambientSceneForLife, useAmbientMusic, AmbientMusicButton, type AmbientScene } from './hooks/useAmbientMusic'
 import ParticleBackground from './components/ParticleBackground'
 import MarqueeText from './components/MarqueeText'
 import { ASSUMPTION_MAX_LEN, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
@@ -74,7 +74,7 @@ export default function App() {
   // 背景音乐跟随场景
   useEffect(() => {
     const isFinal = branch.scene === TOTAL_SCENES && branch.phase === 'done' && branch.insight
-    const scene: AmbientScene = view === 'input' ? 'input' : isFinal ? 'result' : 'generating'
+    const scene: AmbientScene = view === 'input' ? 'input' : view === 'ocean' ? 'reflection' : ambientSceneForLife(branch.scene, Boolean(isFinal))
     music.setScene(scene)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, branch.phase, branch.scene, branch.insight])
