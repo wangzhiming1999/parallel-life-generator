@@ -34,6 +34,7 @@ export default function App() {
   const [oceanMessage, setOceanMessage] = useState('')
   const [publishedArchiveCode, setPublishedArchiveCode] = useState('')
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const storyEndRef = useRef<HTMLDivElement | null>(null)
 
   const music = useAmbientMusic()
 
@@ -92,8 +93,6 @@ export default function App() {
       setTransitioning(false)
       setCustomDecision('')
       setCustomDecisionOpen(false)
-      // 选完滚动回顶部，准备读下一幕
-      window.scrollTo({ top: 0, behavior: 'smooth' })
     }, 600)
   }
 
@@ -115,7 +114,6 @@ export default function App() {
     setPublishedArchiveCode('')
     setResumed(false)
     branch.fork(scene, originalChoice === 0 ? 1 : 0)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleCopy = async () => {
@@ -204,6 +202,15 @@ export default function App() {
   const pulse = getUniversePulse(branch.path)
   const previousPulse = previousUniverse ? getUniversePulse(previousUniverse.path) : null
   const dimensions = Object.entries(pulse.values) as Array<[LifeDimension, number]>
+
+  // 新一幕与流式正文增长时始终跟随最新内容；打开星图时暂停，避免抢走历史浏览位置。
+  useEffect(() => {
+    if (view !== 'story' || mapOpen || transitioning || branch.phase === 'idle') return
+    const frame = requestAnimationFrame(() => {
+      storyEndRef.current?.scrollIntoView({ block: 'end', behavior: branch.phase === 'streaming' ? 'auto' : 'smooth' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [view, mapOpen, transitioning, branch.phase, branch.scene, branch.paragraphs, branch.choices, branch.insight])
 
   return (
     <div className={`memory-world memory-world--${view} min-h-dvh flex flex-col relative`}>
@@ -574,6 +581,7 @@ export default function App() {
                 )
               })}
             </div>
+            <div ref={storyEndRef} aria-hidden="true" className="h-px" />
           </article>
         )}
 
