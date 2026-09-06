@@ -5,6 +5,7 @@ import ParticleBackground from './components/ParticleBackground'
 import MarqueeText from './components/MarqueeText'
 import { ASSUMPTION_MAX_LEN, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
 import { copyText, loadBranchRun, saveBranchRun, clearBranchRun } from './lib/storage'
+import { getLifeStage, getUniversePulse, pathDistance, type LifeDimension } from './lib/universe'
 
 type View = 'input' | 'loading' | 'story'
 
@@ -22,6 +23,10 @@ export default function App() {
   const [transitioning, setTransitioning] = useState(false)
   /** 本次会话是否从存档恢复（影响岔路口文案） */
   const [resumed, setResumed] = useState(false)
+  const [mapOpen, setMapOpen] = useState(false)
+  const [previousUniverse, setPreviousUniverse] = useState<BranchRunState | null>(null)
+  const [customDecisionOpen, setCustomDecisionOpen] = useState(false)
+  const [customDecision, setCustomDecision] = useState('')
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const music = useAmbientMusic()
@@ -46,6 +51,7 @@ export default function App() {
 
   const handleSubmit = () => {
     if (!canSubmit) return
+    music.start()
     clearBranchRun()
     setSavedRun(null)
     setResumed(false)
@@ -72,15 +78,37 @@ export default function App() {
     toastTimerRef.current = setTimeout(() => setToast(''), 2000)
   }
 
-  const handleChoose = (choice: 0 | 1) => {
+  const handleChoose = (choice: 0 | 1, decision?: string) => {
     if (branch.phase !== 'done' || transitioning || branch.scene >= TOTAL_SCENES) return
     setTransitioning(true)
     setTimeout(() => {
-      branch.choose(choice)
+      branch.choose(choice, decision)
       setTransitioning(false)
+      setCustomDecision('')
+      setCustomDecisionOpen(false)
       // 选完滚动回顶部，准备读下一幕
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }, 600)
+  }
+
+  const handleFork = (scene: number, originalChoice: 0 | 1) => {
+    const currentState: BranchRunState = {
+      assumption: branch.scenes.length ? (savedRun?.assumption ?? assumption) : assumption,
+      age,
+      occupation,
+      personality,
+      scenes: branch.scenes,
+      path: branch.path,
+      createdAt: Date.now(),
+      version: 3,
+    }
+    setPreviousUniverse(currentState)
+    setMapOpen(false)
+    setCustomDecision('')
+    setCustomDecisionOpen(false)
+    setResumed(false)
+    branch.fork(scene, originalChoice === 0 ? 1 : 0)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleCopy = async () => {
@@ -96,6 +124,8 @@ export default function App() {
     clearBranchRun()
     setSavedRun(null)
     setResumed(false)
+    setPreviousUniverse(null)
+    setMapOpen(false)
     setView('input')
   }
 
@@ -109,6 +139,9 @@ export default function App() {
 
   const isFinalDone = branch.scene === TOTAL_SCENES && branch.phase === 'done' && branch.insight
   const doneScenes = branch.scenes.filter((s) => s.scene < branch.scene)
+  const pulse = getUniversePulse(branch.path)
+  const previousPulse = previousUniverse ? getUniversePulse(previousUniverse.path) : null
+  const dimensions = Object.entries(pulse.values) as Array<[LifeDimension, number]>
 
   return (
     <div className="min-h-dvh flex flex-col relative" style={{ background: 'var(--color-page)' }}>
@@ -236,6 +269,52 @@ export default function App() {
               transition: 'opacity 0.55s ease',
             }}
           >
+            <header className="universe-console mb-8" aria-label="当前平行宇宙状态">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="universe-kicker">宇宙编号 · {branch.path.map((step) => step.choice === 0 ? 'A' : 'B').join('').slice(-6) || '起点'}</p>
+                  <h1 className="universe-title">{pulse.title}</h1>
+                  <p className="universe-stage">{getLifeStage(branch.scene)} · 第 {branch.scene}/{TOTAL_SCENES} 幕</p>
+                </div>
+                <button className="map-button" onClick={() => setMapOpen((open) => !open)} aria-expanded={mapOpen}>
+                  {mapOpen ? '收起星图' : '打开星图'}
+                </button>
+              </div>
+              <div className="pulse-grid">
+                {dimensions.map(([label, value]) => (
+                  <div key={label} className="pulse-item">
+                    <span>{label}</span><strong>{value}</strong>
+                    <i><b style={{ width: `${value}%` }} /></i>
+                  </div>
+                ))}
+              </div>
+              {pulse.fragments.length > 0 && (
+                <p className="fragment-line">已拾取 {pulse.fragments.length}/6 枚时间碎片 · {pulse.fragments.at(-1)}</p>
+              )}
+            </header>
+
+            {mapOpen && (
+              <section className="timeline-map mb-8" aria-label="世界线星图">
+                <div className="timeline-heading">
+                  <div><strong>你的世界线</strong><span>点击已走过的节点，改选一次</span></div>
+                  <span>{Math.max(1, 2 ** Math.min(branch.path.length, 17)).toLocaleString()} 种可能</span>
+                </div>
+                <div className="timeline-nodes">
+                  {branch.path.map((step) => {
+                    const scene = branch.scenes.find((item) => item.scene === step.scene)
+                    return (
+                      <button key={step.scene} onClick={() => handleFork(step.scene, step.choice)} title="从这里进入另一条世界线">
+                        <span>{step.scene}</span>
+                        <small>{step.decision ?? scene?.choices?.[step.choice] ?? (step.choice === 0 ? '选择 A' : '选择 B')}</small>
+                        <em>改选</em>
+                      </button>
+                    )
+                  })}
+                  {branch.path.length === 0 && <p>做出第一个选择后，世界线会从这里生长。</p>}
+                </div>
+              </section>
+            )}
+
             {/* 走过的幕（紧凑回显） */}
             {doneScenes.map((s) => (
               <section key={s.scene} className="mb-6 done-scene">
@@ -287,6 +366,37 @@ export default function App() {
                       {c}
                     </button>
                   ))}
+                  {!customDecisionOpen ? (
+                    <button onClick={() => setCustomDecisionOpen(true)} className="custom-decision-trigger">
+                      <span>＋</span>
+                      这两个都不是，我自己决定
+                    </button>
+                  ) : (
+                    <form
+                      className="custom-decision-form"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        const decision = customDecision.trim()
+                        if (decision.length >= 2) handleChoose(0, decision)
+                      }}
+                    >
+                      <label htmlFor="custom-decision">此刻，你真正想怎么做？</label>
+                      <textarea
+                        id="custom-decision"
+                        autoFocus
+                        value={customDecision}
+                        onChange={(event) => setCustomDecision(event.target.value.slice(0, 120))}
+                        placeholder="例如：我不辞职，也不留下。我申请三个月假期，先去看看外面的世界。"
+                        rows={3}
+                        maxLength={120}
+                      />
+                      <div>
+                        <span>{customDecision.length}/120</span>
+                        <button type="button" onClick={() => setCustomDecisionOpen(false)}>取消</button>
+                        <button type="submit" disabled={customDecision.trim().length < 2}>就这样决定</button>
+                      </div>
+                    </form>
+                  )}
                 </div>
               </div>
             )}
@@ -325,7 +435,15 @@ export default function App() {
             )}
 
             {isFinalDone && (
-              <div className="flex gap-3 mb-12">
+              <div className="mb-12">
+                {previousPulse && previousUniverse && (
+                  <section className="universe-compare">
+                    <p>你已经抵达第二个结局</p>
+                    <h2>{previousPulse.title} <span>与</span> {pulse.title}</h2>
+                    <strong>{pathDistance(previousUniverse.path, branch.path)} 个选择，让两段人生走向不同的地方</strong>
+                  </section>
+                )}
+                <div className="flex gap-3">
                 <button
                   onClick={handleCopy}
                   className="flex-1 h-[48px] rounded-full text-[16px] font-medium"
@@ -339,7 +457,10 @@ export default function App() {
                   复制这段人生
                 </button>
                 <button
-                  onClick={handleAnother}
+                  onClick={() => {
+                    const lastStep = branch.path[branch.path.length - 1]
+                    if (lastStep) handleFork(lastStep.scene, lastStep.choice)
+                  }}
                   className="flex-1 h-[48px] rounded-full text-[16px]"
                   style={{
                     background: 'transparent',
@@ -348,8 +469,10 @@ export default function App() {
                     cursor: 'pointer',
                   }}
                 >
-                  换一种活法
+                  回到上个岔路
                 </button>
+                </div>
+                <button onClick={handleAnother} className="new-life-button">开启全新假设</button>
               </div>
             )}
 

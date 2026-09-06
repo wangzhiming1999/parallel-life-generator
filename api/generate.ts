@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { containsSensitiveWord } from './_guard.js'
+import type { DecisionStep } from '../src/shared/protocol.js'
 
 export const config = { api: { responseLimit: false } }
 
@@ -106,7 +107,7 @@ function isRateLimited(ip: string): boolean {
 
 /** 从请求体提取分幕参数（history 可选，缺省视为第一幕） */
 function validateSceneBody(body: unknown):
-  | { ok: true; value: { assumption: string; age: string; occupation: string; personality: string; scene: number; history: Array<{ scene: number; choice: 0 | 1 }> } }
+  | { ok: true; value: { assumption: string; age: string; occupation: string; personality: string; scene: number; history: DecisionStep[] } }
   | { ok: false; error: string } {
   if (typeof body !== 'object' || body === null) return { ok: false, error: '请求体格式错误' }
   const b = body as Record<string, unknown>
@@ -120,14 +121,15 @@ function validateSceneBody(body: unknown):
   }
 
   const historyRaw = Array.isArray(b.history) ? b.history : []
-  const history: Array<{ scene: number; choice: 0 | 1 }> = []
+  const history: DecisionStep[] = []
   for (const item of historyRaw) {
     if (typeof item !== 'object' || item === null) continue
     const it = item as Record<string, unknown>
     const s = Number(it.scene)
     const c = Number(it.choice)
     if (Number.isInteger(s) && s >= 1 && s < sceneRaw && (c === 0 || c === 1)) {
-      history.push({ scene: s, choice: c as 0 | 1 })
+      const decision = typeof it.decision === 'string' ? it.decision.trim().slice(0, 120) : ''
+      history.push({ scene: s, choice: c as 0 | 1, ...(decision ? { decision } : {}) })
     }
   }
   if (sceneRaw > 1 && history.length !== sceneRaw - 1) {
@@ -180,7 +182,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   const { assumption, age, occupation, personality, scene, history } = parsed.value
 
-  if (containsSensitiveWord(assumption) || containsSensitiveWord(occupation + personality)) {
+  if (containsSensitiveWord(assumption) || containsSensitiveWord(occupation + personality) || history.some((step) => containsSensitiveWord(step.decision ?? ''))) {
     res.status(422).json({ error: '这个假设超出了档案馆的收录范围，换一个试试吧' })
     return
   }
@@ -198,11 +200,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (scene === 1) {
     userContent = SCENE_FIRST(assumption, profile)
   } else if (scene < TOTAL_SCENES) {
-    const prevSummary = `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者选择了「${lastChoice?.choice === 0 ? 'A' : 'B'}」方向`
-    userContent = SCENE_MIDDLE(scene, prevSummary, lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向') + lifeStageOf(scene)
+    const chosen = lastChoice?.decision || (lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
+    const prevSummary = `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者决定：「${chosen}」`
+    userContent = SCENE_MIDDLE(scene, prevSummary, chosen) + lifeStageOf(scene)
   } else {
     const prevSummary = `「${assumption}」的平行人生，前面 17 幕读者分别走了 ${history.map((h) => (h.choice === 0 ? 'A' : 'B')).join('→')}`
-    userContent = SCENE_FINAL(prevSummary, lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
+    userContent = SCENE_FINAL(prevSummary, lastChoice?.decision || (lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向'))
   }
 
   try {

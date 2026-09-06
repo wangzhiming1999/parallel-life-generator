@@ -8,12 +8,19 @@ export interface GenerateRequest {
   personality?: string
 }
 
+export interface DecisionStep {
+  scene: number
+  choice: 0 | 1
+  /** 用户实际做出的决定；既可以来自预设选项，也可以由用户自由输入。 */
+  decision?: string
+}
+
 /** 幕间请求体：报告当前进度与已做选择，让后端续写下一幕 */
 export interface SceneRequest extends GenerateRequest {
   /** 当前请求的幕序号：1..TOTAL_SCENES（最后一幕为结局幕） */
   scene: number
   /** 已走过的路径：[{scene:1, choice:0}, ...]，供后端续写 */
-  history: Array<{ scene: number; choice: 0 | 1 }>
+  history: DecisionStep[]
 }
 
 export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
@@ -37,7 +44,7 @@ export interface BranchRunState {
   /** 已完成的幕 */
   scenes: SceneData[]
   /** 已做的选择（与 scenes 对齐，最后一幕若已有 choices 则无对应项） */
-  path: Array<{ scene: number; choice: 0 | 1 }>
+  path: DecisionStep[]
   createdAt: number
   version: 3
 }
@@ -96,3 +103,9 @@ export const QUICK_TAGS = [
 export const ASSUMPTION_MAX_LEN = 50
 export const STORAGE_KEY = 'parallel_life_branch_run'
 export const STORAGE_VERSION = 3 // v3：18 幕人生（v2 为 4 幕，不兼容直接弃档）
+
+export function decisionText(step: DecisionStep, choices?: [string, string] | null): string {
+  const custom = step.decision?.trim()
+  if (custom) return custom
+  return choices?.[step.choice] ?? (step.choice === 0 ? '选择 A 的方向' : '选择 B 的方向')
+}

@@ -108,6 +108,18 @@ export function useAmbientMusic() {
     }
   }, [enabled, fadeTo, getAudio])
 
+  /** 必须直接从点击事件调用，借用户手势通过浏览器的自动播放限制。 */
+  const start = useCallback(() => {
+    const el = getAudio()
+    sceneRef.current = 'generating'
+    el.src = TRACKS.generating[0].src
+    el.volume = 0
+    setEnabled(true)
+    void el.play()
+      .then(() => fadeTo(TARGET_VOLUME))
+      .catch(() => setEnabled(false))
+  }, [fadeTo, getAudio])
+
   useEffect(
     () => () => {
       if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
@@ -117,7 +129,7 @@ export function useAmbientMusic() {
     [],
   )
 
-  return { enabled, toggle, setScene }
+  return { enabled, toggle, start, setScene }
 }
 
 /** 右下角音乐开关按钮（固定悬浮） */

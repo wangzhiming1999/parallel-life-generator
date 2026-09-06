@@ -178,6 +178,26 @@ body {
   transform: scale(0.98);
 }
 
+.custom-decision-trigger {
+  min-height: 46px;
+  border: 1px dashed color-mix(in srgb, var(--color-primary-strong) 55%, var(--color-line));
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-primary-strong);
+  font-size: 14px;
+  cursor: pointer;
+}
+.custom-decision-trigger span { margin-right: 7px; font-size: 18px; vertical-align: -1px; }
+.custom-decision-form { padding: 16px; border: 1px solid var(--color-primary); border-radius: 14px; background: var(--color-card); }
+.custom-decision-form label { display: block; margin-bottom: 8px; color: var(--color-ink); font-size: 14px; font-weight: 600; }
+.custom-decision-form textarea { box-sizing: border-box; width: 100%; padding: 10px 12px; resize: vertical; outline: none; border: 1px solid var(--color-line); border-radius: 9px; background: var(--color-page); color: var(--color-ink); font: inherit; font-size: 14px; line-height: 1.6; }
+.custom-decision-form textarea:focus { border-color: var(--color-primary-strong); }
+.custom-decision-form > div { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.custom-decision-form > div span { margin-right: auto; color: var(--color-ink-secondary); font-size: 11px; }
+.custom-decision-form button { padding: 7px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--color-ink-secondary); cursor: pointer; }
+.custom-decision-form button[type="submit"] { background: var(--color-primary); color: var(--color-btn-text); }
+.custom-decision-form button:disabled { opacity: .45; cursor: not-allowed; }
+
 .choice-mark {
   flex-shrink: 0;
   display: inline-flex;
@@ -267,3 +287,63 @@ body {
   cursor: pointer;
 }
 .tag:active { border-color: var(--color-primary); }
+
+/* 平行宇宙控制台：让每次选择都成为可见、可回溯的游戏状态。 */
+.universe-console {
+  position: sticky;
+  top: 12px;
+  z-index: 10;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-line));
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-card) 92%, transparent);
+  box-shadow: 0 12px 40px rgba(61, 43, 31, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+.universe-kicker, .universe-stage, .fragment-line { margin: 0; color: var(--color-ink-secondary); font-size: 11px; }
+.universe-kicker { letter-spacing: .12em; text-transform: uppercase; }
+.universe-title { margin: 2px 0 0; font-size: 19px; line-height: 1.4; font-weight: 650; }
+.map-button {
+  flex: none;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 7px 11px;
+  background: var(--color-page);
+  color: var(--color-primary-strong);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pulse-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+.pulse-item { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px; color: var(--color-ink-secondary); font-size: 11px; }
+.pulse-item strong { color: var(--color-ink); font-size: 12px; }
+.pulse-item i { grid-column: 1 / -1; height: 3px; overflow: hidden; border-radius: 3px; background: var(--color-line); }
+.pulse-item b { display: block; height: 100%; border-radius: inherit; background: var(--color-primary-strong); transition: width .6s ease; }
+.fragment-line { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--color-line); }
+
+.timeline-map { padding: 18px; border-radius: 16px; background: var(--color-card); border: 1px solid var(--color-line); animation: choice-in .35s ease-out both; }
+.timeline-heading { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 14px; font-size: 12px; color: var(--color-primary-strong); }
+.timeline-heading div { display: flex; flex-direction: column; }
+.timeline-heading strong { color: var(--color-ink); font-size: 15px; }
+.timeline-heading div span { color: var(--color-ink-secondary); }
+.timeline-nodes { display: flex; gap: 8px; padding-bottom: 6px; overflow-x: auto; scrollbar-width: thin; }
+.timeline-nodes button { position: relative; flex: 0 0 116px; min-height: 78px; padding: 10px; text-align: left; border: 1px solid var(--color-line); border-radius: 10px; background: var(--color-page); color: var(--color-ink); cursor: pointer; }
+.timeline-nodes button:hover { border-color: var(--color-primary-strong); }
+.timeline-nodes button span { display: block; color: var(--color-primary-strong); font-size: 11px; }
+.timeline-nodes button small { display: -webkit-box; overflow: hidden; margin-top: 4px; line-height: 1.4; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.timeline-nodes button em { position: absolute; right: 8px; bottom: 5px; opacity: 0; color: var(--color-primary-strong); font-size: 10px; font-style: normal; transition: opacity .2s; }
+.timeline-nodes button:hover em, .timeline-nodes button:focus-visible em { opacity: 1; }
+
+.universe-compare { margin-bottom: 18px; padding: 20px; text-align: center; border: 1px solid color-mix(in srgb, var(--color-primary) 45%, var(--color-line)); border-radius: 14px; background: var(--color-card); }
+.universe-compare p, .universe-compare h2 { margin: 0; }
+.universe-compare p { color: var(--color-primary-strong); font-size: 12px; letter-spacing: .08em; }
+.universe-compare h2 { margin-top: 5px; font-size: 18px; }
+.universe-compare h2 span { color: var(--color-ink-secondary); font-size: 12px; font-weight: 400; }
+.universe-compare strong { display: block; margin-top: 8px; color: var(--color-ink-secondary); font-size: 12px; font-weight: 400; }
+.new-life-button { display: block; margin: 16px auto 0; padding: 6px; border: 0; background: transparent; color: var(--color-ink-secondary); font-size: 13px; cursor: pointer; }
+
+@media (max-width: 480px) {
+  .universe-console { top: 6px; }
+  .pulse-grid { grid-template-columns: repeat(2, 1fr); }
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { parseSceneText, TOTAL_SCENES, type BranchRunState, type SceneData } from '../shared/protocol'
+import { decisionText, parseSceneText, TOTAL_SCENES, type BranchRunState, type DecisionStep, type SceneData } from '../shared/protocol'
 
 export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
 
@@ -27,7 +27,7 @@ export interface BranchState {
   /** 已完成的幕（含当前流式幕的历史段落快照） */
   scenes: SceneData[]
   /** 已做的选择路径 */
-  path: Array<{ scene: number; choice: 0 | 1 }>
+  path: DecisionStep[]
   /** 当前幕序号 1..TOTAL_SCENES */
   scene: number
 }
@@ -39,14 +39,14 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
   const [choices, setChoices] = useState<[string, string] | null>(null)
   const [insight, setInsight] = useState('')
   const [scenes, setScenes] = useState<SceneData[]>([])
-  const [path, setPath] = useState<Array<{ scene: number; choice: 0 | 1 }>>([])
+  const [path, setPath] = useState<DecisionStep[]>([])
   const [sceneNum, setSceneNum] = useState(1)
 
   const abortRef = useRef<AbortController | null>(null)
   const firstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   /** requestScene 自引用（递归自动重试用，避免 useCallback 捕获自身） */
-  const selfRef = useRef<((scene: number, history: Array<{ scene: number; choice: 0 | 1 }>, retried?: boolean) => Promise<void>) | null>(null)
+  const selfRef = useRef<((scene: number, history: DecisionStep[], retried?: boolean) => Promise<void>) | null>(null)
 
   // 运行上下文（不触发渲染）
   const ctxRef = useRef<{
@@ -55,7 +55,7 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
     occupation: string
     personality: string
     scenes: SceneData[]
-    path: Array<{ scene: number; choice: 0 | 1 }>
+    path: DecisionStep[]
   }>({ assumption: '', age: '', occupation: '', personality: '', scenes: [], path: [] })
 
   const clearTimers = useCallback(() => {
@@ -95,7 +95,7 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
 
   /** 请求一幕（内部通用）。autoRetryUsed 防止无限重试 */
   const requestScene = useCallback(
-    async (targetScene: number, history: Array<{ scene: number; choice: 0 | 1 }>, autoRetryUsed = false) => {
+    async (targetScene: number, history: DecisionStep[], autoRetryUsed = false) => {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -304,14 +304,31 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
 
   /** 选了一条路：记录并请求下一幕 */
   const choose = useCallback(
-    (choice: 0 | 1) => {
+    (choice: 0 | 1, decision?: string) => {
       const ctx = ctxRef.current
-      const nextPath = [...ctx.path, { scene: sceneNum, choice }]
+      const currentScene = ctx.scenes.find((item) => item.scene === sceneNum)
+      const nextPath = [...ctx.path, { scene: sceneNum, choice, decision: decisionText({ scene: sceneNum, choice, decision }, currentScene?.choices) }]
       ctxRef.current = { ...ctx, path: nextPath }
       setPath(nextPath)
       void requestScene(sceneNum + 1, nextPath)
     },
     [sceneNum, requestScene],
+  )
+
+  /** 回到一个已经走过的岔路，选择另一条路并从那里生成新宇宙。 */
+  const fork = useCallback(
+    (scene: number, choice: 0 | 1) => {
+      const ctx = ctxRef.current
+      if (scene < 1 || scene >= TOTAL_SCENES || !ctx.scenes.some((item) => item.scene === scene)) return
+      const keptScenes = ctx.scenes.filter((item) => item.scene <= scene)
+      const forkScene = ctx.scenes.find((item) => item.scene === scene)
+      const nextPath = [...ctx.path.filter((step) => step.scene < scene), { scene, choice, decision: decisionText({ scene, choice }, forkScene?.choices) }]
+      ctxRef.current = { ...ctx, scenes: keptScenes, path: nextPath }
+      setScenes(keptScenes)
+      setPath(nextPath)
+      void requestScene(scene + 1, nextPath)
+    },
+    [requestScene],
   )
 
   /** 从存档恢复（刷新续传）：重建上下文，停在当前幕等待用户操作 */
@@ -346,6 +363,6 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
 
   return {
     phase, error, paragraphs, choices, insight, scenes, path, scene: sceneNum,
-    startRun, choose, resume, cancel, reset,
+    startRun, choose, fork, resume, cancel, reset,
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseSceneText } from '../src/shared/protocol'
+import { decisionText, parseSceneText } from '../src/shared/protocol'
 
 describe('parseSceneText 真实 Qwen 输出格式', () => {
   it('标签后带 trailing 空格和换行时能解析出选项', () => {
@@ -26,5 +26,16 @@ describe('parseSceneText 真实 Qwen 输出格式', () => {
     const dirty = '【正文】故事。【选项A】】继续弹【选项B】】卖琴'
     const r = parseSceneText(dirty)
     console.log('脏数据 choices:', JSON.stringify(r.choices))
+  })
+})
+
+describe('decisionText', () => {
+  it('自定义决定优先于默认选项', () => {
+    expect(decisionText({ scene: 1, choice: 0, decision: '我决定先休息半年，再重新出发' }, ['留下', '离开']))
+      .toBe('我决定先休息半年，再重新出发')
+  })
+
+  it('没有自定义决定时使用默认选项', () => {
+    expect(decisionText({ scene: 1, choice: 1 }, ['留下', '离开'])).toBe('离开')
   })
 })
