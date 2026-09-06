@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { decisionText, parseSceneText, TOTAL_SCENES, type BranchRunState, type DecisionStep, type SceneData } from '../shared/protocol'
+import { decisionText, isVagueInsight, parseSceneText, TOTAL_SCENES, type BranchRunState, type DecisionStep, type SceneData } from '../shared/protocol'
 
 export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
 
@@ -225,6 +225,17 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
         }
         if (incomplete) {
           setError('岔路口没亮起来，请重试这一幕')
+          setPhase('idle')
+          return
+        }
+
+        const vagueEnding = targetScene === TOTAL_SCENES && isVagueInsight(acc.insight)
+        if (vagueEnding && !autoRetryUsed) {
+          void selfRef.current?.(targetScene, history, true)
+          return
+        }
+        if (vagueEnding) {
+          setError('结尾还没有回应这段人生，请重试结局')
           setPhase('idle')
           return
         }

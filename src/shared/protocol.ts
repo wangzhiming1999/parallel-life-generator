@@ -123,3 +123,12 @@ export function formatStoryMemory(context: StoryMemoryScene[]): string {
     .map((item) => `第${item.scene}幕：${item.text}${item.decision ? `\n你的决定：${item.decision}` : ''}`)
     .join('\n\n')
 }
+
+const VAGUE_INSIGHT_PHRASES = [
+  '不是什么了不起', '没什么了不起', '也没关系', '都没关系', '就够了', '也挺好', '这就很好', '慢一点',
+]
+
+export function isVagueInsight(insight: string | null): boolean {
+  if (!insight || insight.replace(/[，。！？、\s]/g, '').length < 18) return true
+  return VAGUE_INSIGHT_PHRASES.some((phrase) => insight.includes(phrase))
+}

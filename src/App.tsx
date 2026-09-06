@@ -3,7 +3,7 @@ import { useBranch } from './hooks/useBranch'
 import { ambientSceneForLife, useAmbientMusic, AmbientMusicButton, type AmbientScene } from './hooks/useAmbientMusic'
 import ParticleBackground from './components/ParticleBackground'
 import MarqueeText from './components/MarqueeText'
-import { ASSUMPTION_MAX_LEN, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
+import { ASSUMPTION_MAX_LEN, isVagueInsight, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
 import { copyText, loadBranchRun, saveBranchRun, clearBranchRun } from './lib/storage'
 import { getLifeStage, getUniversePulse, pathDistance, type LifeDimension } from './lib/universe'
 import type { ArchiveResponse, PublicArchive } from './shared/archive'
@@ -618,7 +618,7 @@ export default function App() {
                     </div>
                   )
                 })}
-                <blockquote>{caughtArchive.insight}</blockquote>
+                {!isVagueInsight(caughtArchive.insight) && <blockquote>{caughtArchive.insight}</blockquote>}
                 <button onClick={handleSalvage}>把它放回海里，再捞一份</button>
               </article>
             )}

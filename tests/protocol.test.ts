@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decisionText, formatStoryMemory, parseSceneText } from '../src/shared/protocol'
+import { decisionText, formatStoryMemory, isVagueInsight, parseSceneText } from '../src/shared/protocol'
 
 describe('parseSceneText 真实 Qwen 输出格式', () => {
   it('标签后带 trailing 空格和换行时能解析出选项', () => {
@@ -45,5 +45,16 @@ describe('formatStoryMemory', () => {
     expect(formatStoryMemory([
       { scene: 1, text: '你在宿舍收到家里的消息，盯着窗外没有说话。', decision: '买票回家看看' },
     ])).toContain('第1幕：你在宿舍收到家里的消息，盯着窗外没有说话。\n你的决定：买票回家看看')
+  })
+})
+
+describe('isVagueInsight', () => {
+  it('rejects generic comfort that does not explain the life just read', () => {
+    expect(isVagueInsight('在茶馆里坐一坐，也不是什么了不起的事。')).toBe(true)
+    expect(isVagueInsight('慢一点也没关系。')).toBe(true)
+  })
+
+  it('keeps a concrete conclusion tied to the story', () => {
+    expect(isVagueInsight('那张回乡车票没有替你选对人生，却让你终于知道，牵挂和远方可以同时存在。')).toBe(false)
   })
 })

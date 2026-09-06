@@ -462,7 +462,8 @@ body::before {
 .decision-bridge span { flex: none; font-size: 10px; letter-spacing: .1em; }
 .decision-bridge strong { color: var(--color-primary-strong); font-family: STKaiti, KaiTi, "Songti SC", serif; font-size: 14px; font-weight: 500; }
 .insight-card { position: relative; background: rgba(226, 211, 187, .64); border-style: double; }
-.insight-card::before { content: "摘录"; position: absolute; top: -10px; left: 16px; padding: 0 6px; background: #e9ddc8; color: var(--color-primary-strong); font-size: 10px; letter-spacing: .16em; }
+.insight-card::before { content: "这段人生留下的话"; position: absolute; top: -10px; left: 16px; padding: 0 6px; background: #e9ddc8; color: var(--color-primary-strong); font-size: 10px; letter-spacing: .12em; }
+.caught-archive blockquote::before { content: "这段人生留下的话"; display: block; margin-bottom: 8px; color: var(--color-ink-secondary); font-size: 10px; letter-spacing: .12em; }
 .archive-destination-button { border-radius: 3px; border-style: dashed; background: rgba(232, 217, 195, .8); }
 
 .destination-backdrop { background: rgba(39, 31, 27, .72); }
