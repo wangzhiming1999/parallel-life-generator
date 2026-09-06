@@ -196,6 +196,12 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
           if (acc.insight) setInsight(acc.insight)
         }
 
+        // 流结束：刷出 buffer 残留（最后一段通常不带换行，不 flush 会丢失
+        // 【选项B】后的内容 → choiceB 为空 → choices=null → 死寂兜底页）
+        buffer += decoder.decode()
+        finalText += buffer
+        buffer = ''
+
         clearTimers()
         const acc = parseSceneText(finalText)
 
