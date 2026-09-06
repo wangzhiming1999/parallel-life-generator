@@ -27,7 +27,23 @@ const STYLE_GUIDE = `写作风格要求（深夜电台腔，必须遵守）：
 
 const SYSTEM_PROMPT = `你是平行人生档案馆的守馆人，擅长用第二人称书写普通人的另一种人生。\n\n${STYLE_GUIDE}`
 
-const TOTAL_SCENES = 4
+const TOTAL_SCENES = 18
+
+/** 人生阶段：给中间幕注入年龄段语境，让 18 幕读起来像完整一生而非重复日常 */
+function lifeStageOf(scene: number): string {
+  const stages: Array<[number, string]> = [
+    [3, '20 岁出头，刚踏入社会，一切都很新，选什么都带着少年气'],
+    [5, '二十三四岁，第一次真正为自己的人生做主，既兴奋又不安'],
+    [7, '二十五六岁，身边人开始分流，有人结婚有人远方，你在岔路口'],
+    [9, '二十八岁上下，事业与生活的拉扯变多，选择开始有重量'],
+    [11, '三十岁出头，回头看有些路走对了有些走岔了，但都回不去'],
+    [13, '三十五六岁，生活进入深水区，责任比梦想更常出现在清晨'],
+    [15, '四十岁上下，开始与过去的自己和解，也更清楚什么最重要'],
+    [17, '五十多岁，人生过半，更在意身边的人和还没做的小事'],
+  ]
+  const hit = stages.filter(([n]) => scene <= n)[0]
+  return hit ? `（这一幕对应的年龄段：${hit[1]}）` : '（这一幕对应六十岁以后，回望与安放）'
+}
 
 /** 拼接用户背景信息 */
 const profileOf = (age?: string, occupation?: string, personality?: string) =>
@@ -37,10 +53,10 @@ const profileOf = (age?: string, occupation?: string, personality?: string) =>
 /** 第一幕：开题 */
 const SCENE_FIRST = (assumption: string, profile: string) => `人生假设：${assumption}${profile}
 
-这个平行人生将以「人生岔路口」的方式展开：你会先写第一幕，结尾抛出两个都合理、但走向不同的选择，读者选一个，你再续写。
+这个平行人生将以「人生岔路口」的方式展开，一共 18 幕，从青年一路走到人生尽头：你会先写第一幕，结尾抛出两个都合理、但走向不同的选择，读者选一个，你再续写下一幕。请把 18 幕当成一段完整人生来规划——前期开岔、中期深化、后期回望，避免每幕都是相似的日常。
 
 现在写【第一幕】，按以下固定格式输出（三个标签必须齐全，顺序固定）：
-【正文】100-150字，第二人称「你」叙述，具体生活细节，把读者带入这个假设人生刚刚展开的时刻，结尾留下一个自然的岔路口时刻
+【正文】100-150字，第二人称「你」叙述，具体生活细节，把读者带入这个假设人生刚刚展开的时刻（约二十岁上下），结尾留下一个自然的岔路口时刻
 【选项A】不超过12字的短语，概括第一种走法，如「留下来，守住眼前的一切」
 【选项B】不超过12字的短语，概括另一种走法，与A方向明显不同
 除这三个标签和内容外不要输出任何其他内容。`
@@ -53,7 +69,7 @@ ${prev}
 读者选择了：【${chosen}】
 
 现在写【第${n}幕】，承接这个选择往下走，按以下固定格式输出（三个标签必须齐全，顺序固定）：
-【正文】100-150字，第二人称「你」叙述，具体生活细节，写这个选择带来的新境遇，结尾再次留下一个自然的岔路口
+【正文】100-150字，第二人称「你」叙述，具体生活细节，写这个选择带来的新境遇（不要重复之前幕的桥段），结尾再次留下一个自然的岔路口
 【选项A】不超过12字的短语，概括第一种走法
 【选项B】不超过12字的短语，与A方向明显不同
 除这三个标签和内容外不要输出任何其他内容。`
@@ -72,7 +88,7 @@ ${prev}
 
 // 简单内存级 IP 频控（单实例兜底；生产建议升级 Upstash 滑动窗口）
 const RATE_LIMIT_WINDOW_MS = 60_000
-const RATE_LIMIT_MAX = 30 // 分幕模式每局 4 次调用，放宽到 30/分钟
+const RATE_LIMIT_MAX = 30 // 分幕模式一局 18 次调用，用户连选间隔 2s 以上即可承受
 const rateMap = new Map<string, number[]>()
 
 function isRateLimited(ip: string): boolean {
@@ -183,9 +199,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     userContent = SCENE_FIRST(assumption, profile)
   } else if (scene < TOTAL_SCENES) {
     const prevSummary = `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者选择了「${lastChoice?.choice === 0 ? 'A' : 'B'}」方向`
-    userContent = SCENE_MIDDLE(scene, prevSummary, lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
+    userContent = SCENE_MIDDLE(scene, prevSummary, lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向') + lifeStageOf(scene)
   } else {
-    const prevSummary = `「${assumption}」的平行人生，前三幕读者分别走了 ${history.map((h) => (h.choice === 0 ? 'A' : 'B')).join('→')}`
+    const prevSummary = `「${assumption}」的平行人生，前面 17 幕读者分别走了 ${history.map((h) => (h.choice === 0 ? 'A' : 'B')).join('→')}`
     userContent = SCENE_FINAL(prevSummary, lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
   }
 

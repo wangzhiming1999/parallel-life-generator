@@ -28,7 +28,7 @@ export interface BranchState {
   scenes: SceneData[]
   /** 已做的选择路径 */
   path: Array<{ scene: number; choice: 0 | 1 }>
-  /** 当前幕序号 1-4 */
+  /** 当前幕序号 1..TOTAL_SCENES */
   scene: number
 }
 
@@ -250,7 +250,7 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
           scenes: nextScenes,
           path: ctx.path,
           createdAt: Date.now(),
-          version: 2,
+          version: 3,
         })
 
         // 结局幕：额外触发整局完成
@@ -263,7 +263,7 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
             scenes: nextScenes,
             path: ctx.path,
             createdAt: Date.now(),
-            version: 2,
+            version: 3,
           }
           onRunDone?.(runState)
         }

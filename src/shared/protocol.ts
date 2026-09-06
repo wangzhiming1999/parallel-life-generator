@@ -1,5 +1,5 @@
 // 硅基流动 API 中转的共享类型与常量（前端/函数两侧复用）
-// v2：分幕分支模式——3 幕 + 2 选项/幕 + 结局，走马灯逐字点亮
+// v3：18 幕完整人生——17 幕分支 + 结局，走马灯逐字点亮
 
 export interface GenerateRequest {
   assumption: string
@@ -10,7 +10,7 @@ export interface GenerateRequest {
 
 /** 幕间请求体：报告当前进度与已做选择，让后端续写下一幕 */
 export interface SceneRequest extends GenerateRequest {
-  /** 当前请求的幕序号：1/2/3/4（4 = 结局幕） */
+  /** 当前请求的幕序号：1..TOTAL_SCENES（最后一幕为结局幕） */
   scene: number
   /** 已走过的路径：[{scene:1, choice:0}, ...]，供后端续写 */
   history: Array<{ scene: number; choice: 0 | 1 }>
@@ -39,7 +39,7 @@ export interface BranchRunState {
   /** 已做的选择（与 scenes 对齐，最后一幕若已有 choices 则无对应项） */
   path: Array<{ scene: number; choice: 0 | 1 }>
   createdAt: number
-  version: 2
+  version: 3
 }
 
 // 标签协议（Qwen3-8B 关思考后遵从率 100%）
@@ -50,7 +50,7 @@ export const SECTION_TAGS = {
   insight: '【感悟】',
 } as const
 
-export const TOTAL_SCENES = 4 // 前 3 幕分支 + 第 4 幕结局
+export const TOTAL_SCENES = 18 // 前 17 幕分支 + 第 18 幕结局（完整人生）
 
 /** 解析一幕的标签流式/完整文本 */
 export function parseSceneText(text: string): {
@@ -95,4 +95,4 @@ export const QUICK_TAGS = [
 
 export const ASSUMPTION_MAX_LEN = 50
 export const STORAGE_KEY = 'parallel_life_branch_run'
-export const STORAGE_VERSION = 2
+export const STORAGE_VERSION = 3 // v3：18 幕人生（v2 为 4 幕，不兼容直接弃档）

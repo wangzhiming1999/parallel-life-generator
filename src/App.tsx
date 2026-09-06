@@ -353,19 +353,27 @@ export default function App() {
               </div>
             )}
 
-            {/* 幕进度指示 */}
-            <div className="flex justify-center gap-1.5 mb-4">
-              {Array.from({ length: TOTAL_SCENES }, (_, i) => (
-                <span
-                  key={i}
-                  className="inline-block h-1 rounded-full transition-all duration-500"
-                  style={{
-                    width: i + 1 === branch.scene ? 20 : 6,
-                    background: i + 1 <= branch.scene ? 'var(--color-primary-strong)' : 'var(--color-line)',
-                    opacity: i + 1 <= branch.scene ? 1 : 0.6,
-                  }}
-                />
-              ))}
+            {/* 幕进度指示：18 幕改为当前幕为中心的局部窗口，避免整条塞满屏幕 */}
+            <div className="flex justify-center items-center gap-1 mb-4 overflow-hidden" style={{ maxWidth: 180, margin: '0 auto 16px' }}>
+              {Array.from({ length: TOTAL_SCENES }, (_, i) => {
+                const n = i + 1
+                const distance = Math.abs(n - branch.scene)
+                if (distance > 4) return null // 窗口外的不渲染，只显示前后各 4 幕
+                const isCurrent = n === branch.scene
+                const isPast = n < branch.scene
+                return (
+                  <span
+                    key={n}
+                    className="inline-block rounded-full transition-all duration-500"
+                    style={{
+                      width: isCurrent ? 16 : distance <= 2 ? 5 : 3,
+                      height: isCurrent ? 4 : 3,
+                      background: isPast || isCurrent ? 'var(--color-primary-strong)' : 'var(--color-line)',
+                      opacity: isCurrent ? 1 : distance <= 2 ? 0.85 : 0.4,
+                    }}
+                  />
+                )
+              })}
             </div>
           </article>
         )}
