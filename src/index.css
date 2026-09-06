@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* 亮色（暖米白纸张质感） */
+  --color-page: #FBF7F2;
+  --color-primary: #E8A87C;
+  --color-primary-strong: #C77B4A;
+  --color-ink: #3D3D3D;
+  --color-ink-secondary: #8A8A8A;
+  --color-card: #FFFFFF;
+  --color-line: #F0E9E2;
+  --color-btn-text: #3D2B1F;
+}
+
+/* 暗色（暖黑深夜模式，prefers-color-scheme 自动切换） */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-page: #1E1B18;
+    --color-primary: #F0B892;
+    --color-primary-strong: #E8A87C;
+    --color-ink: #E8E2DA;
+    --color-ink-secondary: #9A9188;
+    --color-card: #2A2622;
+    --color-line: #3A342E;
+    --color-btn-text: #2A1E14;
+  }
+}
+
+html {
+  background: var(--color-page);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-size: 16px;
+  line-height: 1.8;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (min-width: 768px) {
+  body { font-size: 17px; }
+}
+
+/* 感悟卡片视觉锚点：✶ 符号 + 强调色，适配截图传播 */
+.insight-card {
+  background: var(--color-card);
+  border: 0.5px solid var(--color-line);
+  border-radius: 12px;
+  padding: 24px 20px;
+  text-align: center;
+}
+
+.insight-mark {
+  color: var(--color-primary-strong);
+  font-size: 18px;
+  line-height: 1;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.insight-text {
+  color: var(--color-primary-strong);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* 流式段落级淡入 */
+@keyframes para-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .para {
+    animation: para-in 0.5s ease-out both;
+  }
+  .breathing {
+    animation: breathe 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* 横滑标签渐隐提示 */
+.tag-scroll {
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, black 88%, transparent);
+  mask-image: linear-gradient(to right, black 88%, transparent);
+}
+.tag-scroll::-webkit-scrollbar { display: none; }
+
+.tag {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  border: 0.5px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-ink);
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tag:active { border-color: var(--color-primary); }
