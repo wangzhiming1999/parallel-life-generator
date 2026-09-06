@@ -5,7 +5,8 @@ export const config = { api: { responseLimit: false } }
 
 // 允许的来源白名单（生产域名 + 本地开发）
 const ALLOWED_ORIGINS = [
-  'https://parallel-life.vercel.app',
+  'https://parallel-life-generator.vercel.app',
+  'https://parallel-life-generator-wnagzhimings-projects.vercel.app',
   'http://localhost:5173',
   'http://localhost:4173',
 ]
