@@ -58,6 +58,8 @@ export default function App() {
 
   const handleSubmit = () => {
     if (!canSubmit) return
+    // 与音乐启动处于同一次用户点击中，避免输入页场景 effect 立刻中断首曲。
+    setView('story')
     music.start()
     clearBranchRun()
     setSavedRun(null)
@@ -207,7 +209,10 @@ export default function App() {
   useEffect(() => {
     if (view !== 'story' || mapOpen || transitioning || branch.phase === 'idle') return
     const frame = requestAnimationFrame(() => {
-      storyEndRef.current?.scrollIntoView({ block: 'end', behavior: branch.phase === 'streaming' ? 'auto' : 'smooth' })
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: branch.phase === 'streaming' ? 'auto' : 'smooth',
+      })
     })
     return () => cancelAnimationFrame(frame)
   }, [view, mapOpen, transitioning, branch.phase, branch.scene, branch.paragraphs, branch.choices, branch.insight])
