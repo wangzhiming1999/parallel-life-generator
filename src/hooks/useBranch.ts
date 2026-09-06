@@ -45,6 +45,8 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
   const abortRef = useRef<AbortController | null>(null)
   const firstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** requestScene 自引用（递归自动重试用，避免 useCallback 捕获自身） */
+  const selfRef = useRef<((scene: number, history: Array<{ scene: number; choice: 0 | 1 }>, retried?: boolean) => Promise<void>) | null>(null)
 
   // 运行上下文（不触发渲染）
   const ctxRef = useRef<{
@@ -58,7 +60,7 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
 
   const clearTimers = useCallback(() => {
     if (firstTimerRef.current) clearTimeout(firstTimerRef.current)
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+    if (idleTimerRef.current) clearInterval(idleTimerRef.current)
     firstTimerRef.current = null
     idleTimerRef.current = null
   }, [])
@@ -91,9 +93,9 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
     [clearTimers],
   )
 
-  /** 请求一幕（内部通用） */
+  /** 请求一幕（内部通用）。autoRetryUsed 防止无限重试 */
   const requestScene = useCallback(
-    async (targetScene: number, history: Array<{ scene: number; choice: 0 | 1 }>) => {
+    async (targetScene: number, history: Array<{ scene: number; choice: 0 | 1 }>, autoRetryUsed = false) => {
       abortRef.current?.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -111,13 +113,23 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
         setPhase('idle')
       }, FIRST_TOKEN_TIMEOUT_MS)
 
-      const resetIdle = () => {
-        if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
-        idleTimerRef.current = setTimeout(() => {
+      // 空闲超时：改为时间戳检查 + 定时器兜底轮询。
+      // 旧实现（每次收 chunk 都 clearTimeout+重设 setTimeout）在浏览器后台标签页
+      // 定时器被节流时会误判超时；新实现只有当真实静默间隔超过阈值时才 abort。
+      // 流式轮询期间的 abort 会被 catch 捕获，timer 已设置好 error/phase，catch 直接 return。
+      let lastChunkAt = Date.now()
+      const idlePoll = setInterval(() => {
+        if (Date.now() - lastChunkAt > STREAM_IDLE_TIMEOUT_MS) {
+          clearInterval(idlePoll)
           controller.abort()
           setError('网络不太稳定，故事没有写完，请重试')
           setPhase('idle')
-        }, STREAM_IDLE_TIMEOUT_MS)
+        }
+      }, 2_000)
+      idleTimerRef.current = idlePoll
+
+      const resetIdle = () => {
+        lastChunkAt = Date.now()
       }
 
       const ctx = ctxRef.current
@@ -193,6 +205,19 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
           return
         }
 
+        // 非结局幕必须有选项。流提前中断（正文有了但【选项A/B】没出来）时不归档，
+        // 自动重试一次：对用户表现为「岔路口晚几秒亮起」，而不是死寂兜底页
+        const incomplete = targetScene < TOTAL_SCENES && !acc.choices
+        if (incomplete && !autoRetryUsed) {
+          void selfRef.current?.(targetScene, history, true)
+          return
+        }
+        if (incomplete) {
+          setError('岔路口没亮起来，请重试这一幕')
+          setPhase('idle')
+          return
+        }
+
         const sceneData: SceneData = {
           scene: targetScene,
           paragraphs: acc.paragraphs,
@@ -238,13 +263,21 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
         }
       } catch (e) {
         clearTimers()
+        // AbortError 可能来自：用户主动 cancel/reset、首 token 超时、流中空闲超时。
+        // 超时场景的 timer 回调已先设置好 error + phase('idle')，read 被中断后才抛出
+        // AbortError 走到这里——保持 timer 设定的状态即可，不重复归档也不静默吞掉。
+        // 其他网络错误（连接中断等）明确提示，绝不把半截内容静默归档成死寂页。
         if (e instanceof DOMException && e.name === 'AbortError') return
         setError('网络不太稳定，请稍后重试')
         setPhase('idle')
       }
     },
-    [clearTimers, onSceneDone, onRunDone],
+    [clearTimers, onSceneDone, onRunDone, onSnapshot],
   )
+  // 挂到 ref 上，供流中断时的递归自动重试使用（useEffect 中赋值，避免 render 期间碰 ref）
+  useEffect(() => {
+    selfRef.current = requestScene
+  }, [requestScene])
 
   /** 开新一局：第一幕 */
   const startRun = useCallback(
