@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decisionText, parseSceneText } from '../src/shared/protocol'
+import { decisionText, formatStoryMemory, parseSceneText } from '../src/shared/protocol'
 
 describe('parseSceneText 真实 Qwen 输出格式', () => {
   it('标签后带 trailing 空格和换行时能解析出选项', () => {
@@ -37,5 +37,13 @@ describe('decisionText', () => {
 
   it('没有自定义决定时使用默认选项', () => {
     expect(decisionText({ scene: 1, choice: 1 }, ['留下', '离开'])).toBe('离开')
+  })
+})
+
+describe('formatStoryMemory', () => {
+  it('keeps the actual previous scene and decision adjacent for narrative continuity', () => {
+    expect(formatStoryMemory([
+      { scene: 1, text: '你在宿舍收到家里的消息，盯着窗外没有说话。', decision: '买票回家看看' },
+    ])).toContain('第1幕：你在宿舍收到家里的消息，盯着窗外没有说话。\n你的决定：买票回家看看')
   })
 })

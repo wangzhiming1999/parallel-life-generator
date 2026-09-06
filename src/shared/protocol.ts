@@ -15,12 +15,20 @@ export interface DecisionStep {
   decision?: string
 }
 
+export interface StoryMemoryScene {
+  scene: number
+  text: string
+  decision?: string
+}
+
 /** 幕间请求体：报告当前进度与已做选择，让后端续写下一幕 */
 export interface SceneRequest extends GenerateRequest {
   /** 当前请求的幕序号：1..TOTAL_SCENES（最后一幕为结局幕） */
   scene: number
   /** 已走过的路径：[{scene:1, choice:0}, ...]，供后端续写 */
   history: DecisionStep[]
+  /** 最近几幕的真实正文，用来保持人物、地点和动作连续。 */
+  context?: StoryMemoryScene[]
 }
 
 export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
@@ -108,4 +116,10 @@ export function decisionText(step: DecisionStep, choices?: [string, string] | nu
   const custom = step.decision?.trim()
   if (custom) return custom
   return choices?.[step.choice] ?? (step.choice === 0 ? '选择 A 的方向' : '选择 B 的方向')
+}
+
+export function formatStoryMemory(context: StoryMemoryScene[]): string {
+  return context
+    .map((item) => `第${item.scene}幕：${item.text}${item.decision ? `\n你的决定：${item.decision}` : ''}`)
+    .join('\n\n')
 }

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { containsSensitiveWord } from './_guard.js'
 import type { DecisionStep } from '../src/shared/protocol.js'
+import { formatStoryMemory, type StoryMemoryScene } from '../src/shared/protocol.js'
 
 export const config = { api: { responseLimit: false } }
 
@@ -63,14 +64,14 @@ const SCENE_FIRST = (assumption: string, profile: string) => `人生假设：${a
 除这三个标签和内容外不要输出任何其他内容。`
 
 /** 中间幕：续写 */
-const SCENE_MIDDLE = (n: number, prev: string, chosen: string) => `你之前写到：
+const SCENE_MIDDLE = (n: number, prev: string, chosen: string) => `以下是这段人生最近发生的真实内容：
 
 ${prev}
 
 读者选择了：【${chosen}】
 
 现在写【第${n}幕】，承接这个选择往下走，按以下固定格式输出（三个标签必须齐全，顺序固定）：
-【正文】100-150字，第二人称「你」叙述，具体生活细节，写这个选择带来的新境遇（不要重复之前幕的桥段），结尾再次留下一个自然的岔路口
+【正文】100-150字，第二人称「你」叙述。开头第一句必须承接上一幕最后的地点、人物或动作，并自然交代时间过去了多久，再进入这个选择带来的新境遇；不得把上一幕当作没发生，也不要重复之前幕的桥段。结尾再次留下一个自然的岔路口
 【选项A】不超过12字的短语，概括第一种走法
 【选项B】不超过12字的短语，与A方向明显不同
 除这三个标签和内容外不要输出任何其他内容。`
@@ -107,7 +108,7 @@ function isRateLimited(ip: string): boolean {
 
 /** 从请求体提取分幕参数（history 可选，缺省视为第一幕） */
 function validateSceneBody(body: unknown):
-  | { ok: true; value: { assumption: string; age: string; occupation: string; personality: string; scene: number; history: DecisionStep[] } }
+  | { ok: true; value: { assumption: string; age: string; occupation: string; personality: string; scene: number; history: DecisionStep[]; context: StoryMemoryScene[] } }
   | { ok: false; error: string } {
   if (typeof body !== 'object' || body === null) return { ok: false, error: '请求体格式错误' }
   const b = body as Record<string, unknown>
@@ -136,6 +137,19 @@ function validateSceneBody(body: unknown):
     return { ok: false, error: '路径不完整' }
   }
 
+  const contextRaw = Array.isArray(b.context) ? b.context.slice(-4) : []
+  const context: StoryMemoryScene[] = []
+  for (const item of contextRaw) {
+    if (typeof item !== 'object' || item === null) continue
+    const value = item as Record<string, unknown>
+    const contextScene = Number(value.scene)
+    const text = typeof value.text === 'string' ? value.text.trim().slice(0, 500) : ''
+    const decision = typeof value.decision === 'string' ? value.decision.trim().slice(0, 120) : ''
+    if (Number.isInteger(contextScene) && contextScene >= 1 && contextScene < sceneRaw && text) {
+      context.push({ scene: contextScene, text, ...(decision ? { decision } : {}) })
+    }
+  }
+
   const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
   return {
     ok: true,
@@ -146,6 +160,7 @@ function validateSceneBody(body: unknown):
       personality: str(b.personality, 20),
       scene: sceneRaw,
       history,
+      context,
     },
   }
 }
@@ -180,9 +195,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ error: parsed.error })
     return
   }
-  const { assumption, age, occupation, personality, scene, history } = parsed.value
+  const { assumption, age, occupation, personality, scene, history, context } = parsed.value
 
-  if (containsSensitiveWord(assumption) || containsSensitiveWord(occupation + personality) || history.some((step) => containsSensitiveWord(step.decision ?? ''))) {
+  if (containsSensitiveWord(assumption) || containsSensitiveWord(occupation + personality) || history.some((step) => containsSensitiveWord(step.decision ?? '')) || context.some((item) => containsSensitiveWord(item.text + (item.decision ?? '')))) {
     res.status(422).json({ error: '这个假设超出了档案馆的收录范围，换一个试试吧' })
     return
   }
@@ -201,10 +216,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     userContent = SCENE_FIRST(assumption, profile)
   } else if (scene < TOTAL_SCENES) {
     const chosen = lastChoice?.decision || (lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
-    const prevSummary = `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者决定：「${chosen}」`
+    const prevSummary = formatStoryMemory(context) || `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者决定：「${chosen}」`
     userContent = SCENE_MIDDLE(scene, prevSummary, chosen) + lifeStageOf(scene)
   } else {
-    const prevSummary = `「${assumption}」的平行人生，前面 17 幕读者分别走了 ${history.map((h) => (h.choice === 0 ? 'A' : 'B')).join('→')}`
+    const decisionTrail = history.map((item) => item.decision).filter(Boolean).slice(-8).join(' → ')
+    const prevSummary = `${formatStoryMemory(context)}\n\n此前关键决定：${decisionTrail}`
     userContent = SCENE_FINAL(prevSummary, lastChoice?.decision || (lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向'))
   }
 

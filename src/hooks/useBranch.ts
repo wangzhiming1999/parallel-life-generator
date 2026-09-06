@@ -144,6 +144,11 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
             personality: ctx.personality,
             scene: targetScene,
             history,
+            context: ctx.scenes.slice(-4).map((scene) => ({
+              scene: scene.scene,
+              text: scene.paragraphs.join('\n').slice(0, 500),
+              decision: history.find((step) => step.scene === scene.scene)?.decision,
+            })),
           }),
           signal: controller.signal,
         })
