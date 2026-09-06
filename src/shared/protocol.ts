@@ -126,6 +126,7 @@ export function formatStoryMemory(context: StoryMemoryScene[]): string {
 
 const VAGUE_INSIGHT_PHRASES = [
   '不是什么了不起', '没什么了不起', '也没关系', '都没关系', '就够了', '也挺好', '这就很好', '慢一点',
+  '你终于明白', '人生就是', '原来我们都',
 ]
 
 export function isVagueInsight(insight: string | null): boolean {

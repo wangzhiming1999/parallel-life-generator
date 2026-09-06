@@ -52,6 +52,8 @@ describe('isVagueInsight', () => {
   it('rejects generic comfort that does not explain the life just read', () => {
     expect(isVagueInsight('在茶馆里坐一坐，也不是什么了不起的事。')).toBe(true)
     expect(isVagueInsight('慢一点也没关系。')).toBe(true)
+    expect(isVagueInsight('你终于明白，人生就是要学会珍惜。')).toBe(true)
+    expect(isVagueInsight('原来我们都要学会与遗憾和解。')).toBe(true)
   })
 
   it('keeps a concrete conclusion tied to the story', () => {
