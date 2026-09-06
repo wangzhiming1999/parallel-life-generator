@@ -11,17 +11,15 @@ const ALLOWED_ORIGINS = [
   'http://localhost:4173',
 ]
 
-const SYSTEM_PROMPT = `你是平行人生档案馆的守馆人，擅长用第二人称书写普通人的另一种人生。
-用户会输入一个人生假设，以及可选的年龄、职业、性格背景。
-请生成一段专属的平行人生故事，严格遵守以下规则：
+const SYSTEM_PROMPT = '你是平行人生档案馆的守馆人。'
 
-1. 输出固定为三段，用三个等号「===」作为分隔符连接，格式为：
-第一段标题===第二段正文===第三段感悟
-2. 第一段：简短有氛围感的标题，不超过12个字，不要书名号
-3. 第二段：300-500字正文，分3-4个自然段，自然段之间用单个换行符分隔。用第二人称"你"叙述，写具体的生活细节（比如工位上冷掉的咖啡、傍晚菜市场的烟火、深夜阳台的风），不要宏大叙事。要有真实的喜怒哀乐，不要完美人生，也不要彻底悲剧，就是普通真实的另一种生活，有一个淡淡的落点。
-4. 第三段：1句收尾感悟，温暖克制，不鸡汤，点到为止，能让人产生共鸣。
-5. 语言风格：平实、有画面感，像在讲真实发生的事，不要华丽辞藻
-6. 除这三段内容和两个分隔符外，禁止输出任何解释、问候、书名号、多余说明`
+const USER_TEMPLATE = (assumption: string, extra: string) => `人生假设：${assumption}${extra}
+
+写一个平行人生故事，按以下固定格式输出（三个标签必须齐全，顺序固定）：
+【标题】不超过12个字
+【正文】300-500字（硬性要求），第二人称「你」叙述，写具体的生活细节（清晨的蒸汽、傍晚的风铃、深夜的账本这类真实细节），分3-4个自然段，有真实的喜怒哀乐，不要完美人生也不要彻底悲剧，有一个淡淡的落点
+【感悟】1句话，温暖克制，不鸡汤，点到为止
+除这三个标签和内容外不要输出任何其他内容。`
 
 // 简单内存级 IP 频控（单实例兜底；生产建议升级 Upstash 滑动窗口）
 const RATE_LIMIT_WINDOW_MS = 60_000
@@ -84,14 +82,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const userContent = [
-    `人生假设：${assumption}`,
-    age ? `年龄：${age}` : '',
-    occupation ? `职业：${occupation}` : '',
-    personality ? `性格：${personality}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n')
+  const userContent = USER_TEMPLATE(
+    assumption,
+    [
+      age ? `\n年龄：${age}` : '',
+      occupation ? `\n职业：${occupation}` : '',
+      personality ? `\n性格：${personality}` : '',
+    ].join(''),
+  )
 
   try {
     const upstream = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
@@ -106,9 +104,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userContent },
         ],
-        temperature: 0.85,
+        temperature: 0.9,
+        top_p: 0.95,
         max_tokens: 1500,
         stream: true,
+        // 关键：关闭思考模式。Qwen3-8B 默认思考会先输出数百字 reasoning，
+        // 耗尽前端首 token 超时（15s），且挤压正文 token 预算
+        enable_thinking: false,
       }),
     })
 
@@ -152,7 +154,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 输出侧敏感词兜底：发现即终止连接（此时大部分内容已流出，仅作兜底）
     if (containsSensitiveWord(outputText)) {
-      res.end('\n===\n===生成中断，请重试')
+      res.end('【感悟】生成中断，请重试')
       return
     }
     res.end()

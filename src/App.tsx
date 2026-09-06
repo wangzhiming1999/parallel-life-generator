@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useGenerate } from './hooks/useGenerate'
+import { useAmbientMusic, AmbientMusicButton, type AmbientScene } from './hooks/useAmbientMusic'
+import ParticleBackground from './components/ParticleBackground'
 import { ASSUMPTION_MAX_LEN, QUICK_TAGS, type StoryResult } from './shared/protocol'
 import { copyText, loadLastResult, saveLastResult } from './lib/storage'
 
@@ -15,6 +17,8 @@ export default function App() {
   const [toast, setToast] = useState('')
   const [cached, setCached] = useState<StoryResult | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const music = useAmbientMusic()
 
   const handleDone = useCallback((result: StoryResult) => {
     saveLastResult(result)
@@ -46,6 +50,14 @@ export default function App() {
     if (phase === 'idle' && error) setView('input')
   }, [phase, error])
 
+  // 背景音乐跟随场景切换
+  useEffect(() => {
+    const scene: AmbientScene =
+      view === 'input' ? 'input' : view === 'loading' ? 'generating' : phase === 'done' ? 'result' : 'generating'
+    music.setScene(scene)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, phase])
+
   const showToast = (msg: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast(msg)
@@ -69,8 +81,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col" style={{ background: 'var(--color-page)' }}>
-      <main className="flex-1 w-full max-w-[640px] mx-auto px-5 py-10">
+    <div className="min-h-dvh flex flex-col relative" style={{ background: 'var(--color-page)' }}>
+      <ParticleBackground />
+      <main className="flex-1 w-full max-w-[640px] mx-auto px-5 py-10 relative" style={{ zIndex: 1 }}>
         {view === 'input' && (
           <>
             {cached && (
@@ -270,11 +283,13 @@ export default function App() {
       {toast && (
         <div
           className="fixed left-1/2 bottom-16 -translate-x-1/2 px-4 py-2 rounded-full text-[14px]"
-          style={{ background: 'var(--color-card)', color: 'var(--color-ink)', border: '0.5px solid var(--color-line)' }}
+          style={{ background: 'var(--color-card)', color: 'var(--color-ink)', border: '0.5px solid var(--color-line)', zIndex: 20 }}
         >
           {toast}
         </div>
       )}
+
+      <AmbientMusicButton enabled={music.enabled} onToggle={music.toggle} />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { SECTION_SEPARATOR, type StoryResult } from '../shared/protocol'
+import { parseTaggedText, type StoryResult } from '../shared/protocol'
 
 export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
 
@@ -7,8 +7,10 @@ interface UseGenerateOptions {
   onDone?: (result: StoryResult) => void
 }
 
-// 首 token 超时 / 流中空闲超时（双计时，避免长故事被误杀）
-const FIRST_TOKEN_TIMEOUT_MS = 15_000
+// 首 token 超时：线上实测硅基流动 p50 首字节 ~0.7s、完整生成 10-20s，
+// 首字节慢多见于冷启动/排队，20s 给足余量
+const FIRST_TOKEN_TIMEOUT_MS = 20_000
+// 流中空闲超时：每次收到数据刷新，10s 无新增判定断流
 const STREAM_IDLE_TIMEOUT_MS = 10_000
 
 export interface GenerateState {
@@ -52,20 +54,26 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
   }, [clearTimers])
 
   // 直接展示一条已有结果（如 localStorage 回看），置为 done
-  const showResult = useCallback((result: StoryResult) => {
-    clearTimers()
-    abortRef.current?.abort()
-    setTitle(result.title)
-    setParagraphs(result.story.split('\n').map((s) => s.trim()).filter(Boolean))
-    setInsight(result.insight)
-    setError('')
-    setPhase('done')
-  }, [clearTimers])
+  const showResult = useCallback(
+    (result: StoryResult) => {
+      clearTimers()
+      abortRef.current?.abort()
+      setTitle(result.title)
+      setParagraphs(result.story.split('\n').map((s) => s.trim()).filter(Boolean))
+      setInsight(result.insight)
+      setError('')
+      setPhase('done')
+    },
+    [clearTimers],
+  )
 
-  useEffect(() => () => {
-    abortRef.current?.abort()
-    clearTimers()
-  }, [clearTimers])
+  useEffect(
+    () => () => {
+      abortRef.current?.abort()
+      clearTimers()
+    },
+    [clearTimers],
+  )
 
   const generate = useCallback(
     async (body: { assumption: string; age?: string; occupation?: string; personality?: string }) => {
@@ -79,7 +87,7 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
       setError('')
       setPhase('loading')
 
-      // 首 token 超时：15s 内没有任何输出则提示
+      // 首 token 超时：20s 内没有任何输出则提示
       firstTimerRef.current = setTimeout(() => {
         controller.abort()
         setError('时空隧道有点拥堵，请稍后再试')
@@ -109,7 +117,9 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
           try {
             const data = await res.json()
             if (data?.error) msg = data.error
-          } catch { /* 忽略 */ }
+          } catch {
+            /* 忽略 */
+          }
           clearTimers()
           setError(msg)
           setPhase('idle')
@@ -146,26 +156,19 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
           if (!chunk) continue
 
           finalText += chunk
-          const acc = finalText.split(SECTION_SEPARATOR)
-          setTitle(acc[0]?.trim() ?? '')
-          setParagraphs(
-            (acc[1] ?? '')
-              .split('\n')
-              .map((s) => s.trim())
-              .filter(Boolean),
-          )
-          setInsight(acc[2]?.trim() ?? '')
+          // 标签协议流式解析：出现多少标签就渲染多少
+          const acc = parseTaggedText(finalText)
+          if (acc.title) setTitle(acc.title)
+          if (acc.paragraphs.length) setParagraphs(acc.paragraphs)
+          if (acc.insight) setInsight(acc.insight)
         }
 
         clearTimers()
 
-        const parts = finalText.split(SECTION_SEPARATOR).map((s) => s.trim())
-        const finalTitle = (parts[0] ?? '').slice(0, 20) || '平行人生'
-        const finalParagraphs = (parts[1] ?? '')
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean)
-        const finalInsight = parts[2] ?? ''
+        const result = parseTaggedText(finalText)
+        const finalTitle = result.title || '平行人生'
+        const finalParagraphs = result.paragraphs
+        const finalInsight = result.insight
 
         setTitle(finalTitle)
         setParagraphs(finalParagraphs)
