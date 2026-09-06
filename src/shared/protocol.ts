@@ -133,3 +133,13 @@ export function isVagueInsight(insight: string | null): boolean {
   if (!insight || insight.replace(/[，。！？、\s]/g, '').length < 18) return true
   return VAGUE_INSIGHT_PHRASES.some((phrase) => insight.includes(phrase))
 }
+
+/** 拦截模型把上一幕整句搬进新一幕；短对话和必要名词不视为重复。 */
+export function hasRepeatedNarrative(previous: string[], current: string): boolean {
+  const normalize = (text: string) => text.replace(/[“”‘’「」『』\s]/g, '')
+  const prior = normalize(previous.join(''))
+  return current
+    .split(/[。！？!?]/)
+    .map(normalize)
+    .some((sentence) => sentence.length >= 16 && prior.includes(sentence))
+}

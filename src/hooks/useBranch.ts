@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { decisionText, isVagueInsight, parseSceneText, TOTAL_SCENES, type BranchRunState, type DecisionStep, type SceneData } from '../shared/protocol'
+import { decisionText, hasRepeatedNarrative, isVagueInsight, parseSceneText, TOTAL_SCENES, type BranchRunState, type DecisionStep, type SceneData } from '../shared/protocol'
 
 export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
 
@@ -225,6 +225,20 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
         }
         if (incomplete) {
           setError('岔路口没亮起来，请重试这一幕')
+          setPhase('idle')
+          return
+        }
+
+        const repeatsPriorScene = targetScene > 1 && hasRepeatedNarrative(
+          ctx.scenes.slice(-4).flatMap((scene) => scene.paragraphs),
+          acc.paragraphs.join(''),
+        )
+        if (repeatsPriorScene && !autoRetryUsed) {
+          void selfRef.current?.(targetScene, history, true)
+          return
+        }
+        if (repeatsPriorScene) {
+          setError('这一幕和前文太相似，请重试这一幕')
           setPhase('idle')
           return
         }

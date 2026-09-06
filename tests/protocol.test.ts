@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decisionText, formatStoryMemory, isVagueInsight, parseSceneText } from '../src/shared/protocol'
+import { decisionText, formatStoryMemory, hasRepeatedNarrative, isVagueInsight, parseSceneText } from '../src/shared/protocol'
 
 describe('parseSceneText 真实 Qwen 输出格式', () => {
   it('标签后带 trailing 空格和换行时能解析出选项', () => {
@@ -58,5 +58,13 @@ describe('isVagueInsight', () => {
 
   it('keeps a concrete conclusion tied to the story', () => {
     expect(isVagueInsight('那张回乡车票没有替你选对人生，却让你终于知道，牵挂和远方可以同时存在。')).toBe(false)
+  })
+})
+
+describe('hasRepeatedNarrative', () => {
+  it('detects a full sentence copied from a previous scene', () => {
+    const previous = ['如今你学会了用“职业规划”代替“未来”，却始终没学会怎么把“我们”变成“我”。']
+    expect(hasRepeatedNarrative(previous, '三个月后，你换了工位。如今你学会了用职业规划代替未来，却始终没学会怎么把我们变成我。')).toBe(true)
+    expect(hasRepeatedNarrative(previous, '三个月后，你把入职通知书贴进采访本，第一次主动申请跑长期调查。')).toBe(false)
   })
 })
