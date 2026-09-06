@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { containsSensitiveWord, validateGenerateBody } from './_guard'
+import { containsSensitiveWord, validateGenerateBody } from './_guard.js'
 
 export const config = { api: { responseLimit: false } }
 
