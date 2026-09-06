@@ -176,7 +176,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const parsed = validateSceneBody(req.body)
-  if (!parsed.ok) {
+  if ('error' in parsed) {
     res.status(400).json({ error: parsed.error })
     return
   }
