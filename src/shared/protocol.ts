@@ -1,4 +1,6 @@
 // 硅基流动 API 中转的共享类型与常量（前端/函数两侧复用）
+// v2：分幕分支模式——3 幕 + 2 选项/幕 + 结局，走马灯逐字点亮
+
 export interface GenerateRequest {
   assumption: string
   age?: string
@@ -6,51 +8,79 @@ export interface GenerateRequest {
   personality?: string
 }
 
-export interface StoryResult {
-  title: string
-  story: string
-  insight: string
-  createdAt: number
-  version: 1
+/** 幕间请求体：报告当前进度与已做选择，让后端续写下一幕 */
+export interface SceneRequest extends GenerateRequest {
+  /** 当前请求的幕序号：1/2/3/4（4 = 结局幕） */
+  scene: number
+  /** 已走过的路径：[{scene:1, choice:0}, ...]，供后端续写 */
+  history: Array<{ scene: number; choice: 0 | 1 }>
 }
 
-// 分段标签协议（实测 Qwen3-8B 关思考后遵从率 100%，远高于 === 分隔符的 ~50%）
+export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
+
+/** 单幕完整数据（客户端组装用于存档） */
+export interface SceneData {
+  scene: number
+  paragraphs: string[]
+  /** 非结局幕的选项；结局幕为 null */
+  choices: [string, string] | null
+  /** 结局幕的感悟；非结局幕为 null */
+  insight: string | null
+}
+
+/** 一局完整存档 */
+export interface BranchRunState {
+  assumption: string
+  age: string
+  occupation: string
+  personality: string
+  /** 已完成的幕 */
+  scenes: SceneData[]
+  /** 已做的选择（与 scenes 对齐，最后一幕若已有 choices 则无对应项） */
+  path: Array<{ scene: number; choice: 0 | 1 }>
+  createdAt: number
+  version: 2
+}
+
+// 标签协议（Qwen3-8B 关思考后遵从率 100%）
 export const SECTION_TAGS = {
-  title: '【标题】',
   story: '【正文】',
+  optionA: '【选项A】',
+  optionB: '【选项B】',
   insight: '【感悟】',
 } as const
 
-/**
- * 解析标签协议的流式/完整文本。
- * 返回 { title, paragraphs, insight }，未出现的字段为空。
- */
-export function parseTaggedText(text: string): {
-  title: string
-  paragraphs: string[]
-  insight: string
-} {
-  const titleIdx = text.indexOf(SECTION_TAGS.title)
-  const storyIdx = text.indexOf(SECTION_TAGS.story)
-  const insightIdx = text.indexOf(SECTION_TAGS.insight)
+export const TOTAL_SCENES = 4 // 前 3 幕分支 + 第 4 幕结局
 
-  const title =
-    titleIdx >= 0
-      ? text.slice(titleIdx + SECTION_TAGS.title.length, storyIdx > 0 ? storyIdx : undefined)
-      : ''
+/** 解析一幕的标签流式/完整文本 */
+export function parseSceneText(text: string): {
+  paragraphs: string[]
+  choices: [string, string] | null
+  insight: string | null
+} {
+  const storyIdx = text.indexOf(SECTION_TAGS.story)
+  const aIdx = text.indexOf(SECTION_TAGS.optionA)
+  const bIdx = text.indexOf(SECTION_TAGS.optionB)
+  const insIdx = text.indexOf(SECTION_TAGS.insight)
+
   const story =
     storyIdx >= 0
-      ? text.slice(storyIdx + SECTION_TAGS.story.length, insightIdx > 0 ? insightIdx : undefined)
+      ? text.slice(storyIdx + SECTION_TAGS.story.length, aIdx >= 0 ? aIdx : insIdx >= 0 ? insIdx : undefined)
       : ''
-  const insight = insightIdx >= 0 ? text.slice(insightIdx + SECTION_TAGS.insight.length) : ''
+  const choiceA =
+    aIdx >= 0
+      ? text.slice(aIdx + SECTION_TAGS.optionA.length, bIdx >= 0 ? bIdx : undefined).trim().split('\n')[0]
+      : ''
+  const choiceB = bIdx >= 0 ? text.slice(bIdx + SECTION_TAGS.optionB.length, insIdx >= 0 ? insIdx : undefined).trim().split('\n')[0] : ''
+  const insight = insIdx >= 0 ? text.slice(insIdx + SECTION_TAGS.insight.length).trim().split('\n')[0] : ''
 
   return {
-    title: title.trim().slice(0, 20),
     paragraphs: story
       .split('\n')
       .map((s) => s.trim())
       .filter(Boolean),
-    insight: insight.trim().split('\n')[0] ?? '',
+    choices: choiceA && choiceB ? [choiceA, choiceB] : null,
+    insight: insight || null,
   }
 }
 
@@ -64,5 +94,5 @@ export const QUICK_TAGS = [
 ] as const
 
 export const ASSUMPTION_MAX_LEN = 50
-export const STORAGE_KEY = 'parallel_life_last_result'
-export const STORAGE_VERSION = 1
+export const STORAGE_KEY = 'parallel_life_branch_run'
+export const STORAGE_VERSION = 2

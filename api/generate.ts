@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { containsSensitiveWord, validateGenerateBody } from './_guard.js'
+import { containsSensitiveWord } from './_guard.js'
 
 export const config = { api: { responseLimit: false } }
 
@@ -11,19 +11,54 @@ const ALLOWED_ORIGINS = [
   'http://localhost:4173',
 ]
 
-const SYSTEM_PROMPT = '你是平行人生档案馆的守馆人。'
+const SYSTEM_PROMPT = '你是平行人生档案馆的守馆人，擅长用第二人称书写普通人的另一种人生。'
 
-const USER_TEMPLATE = (assumption: string, extra: string) => `人生假设：${assumption}${extra}
+const TOTAL_SCENES = 4
 
-写一个平行人生故事，按以下固定格式输出（三个标签必须齐全，顺序固定）：
-【标题】不超过12个字
-【正文】300-500字（硬性要求），第二人称「你」叙述，写具体的生活细节（清晨的蒸汽、傍晚的风铃、深夜的账本这类真实细节），分3-4个自然段，有真实的喜怒哀乐，不要完美人生也不要彻底悲剧，有一个淡淡的落点
-【感悟】1句话，温暖克制，不鸡汤，点到为止
+/** 拼接用户背景信息 */
+const profileOf = (age?: string, occupation?: string, personality?: string) =>
+  [age ? `\n年龄：${age}` : '', occupation ? `\n职业：${occupation}` : '', personality ? `\n性格：${personality}` : '']
+    .join('')
+
+/** 第一幕：开题 */
+const SCENE_FIRST = (assumption: string, profile: string) => `人生假设：${assumption}${profile}
+
+这个平行人生将以「人生岔路口」的方式展开：你会先写第一幕，结尾抛出两个都合理、但走向不同的选择，读者选一个，你再续写。
+
+现在写【第一幕】，按以下固定格式输出（三个标签必须齐全，顺序固定）：
+【正文】100-150字，第二人称「你」叙述，具体生活细节，把读者带入这个假设人生刚刚展开的时刻，结尾留下一个自然的岔路口时刻
+【选项A】不超过12字的短语，概括第一种走法，如「留下来，守住眼前的一切」
+【选项B】不超过12字的短语，概括另一种走法，与A方向明显不同
 除这三个标签和内容外不要输出任何其他内容。`
+
+/** 中间幕：续写 */
+const SCENE_MIDDLE = (n: number, prev: string, chosen: string) => `你之前写到：
+
+${prev}
+
+读者选择了：【${chosen}】
+
+现在写【第${n}幕】，承接这个选择往下走，按以下固定格式输出（三个标签必须齐全，顺序固定）：
+【正文】100-150字，第二人称「你」叙述，具体生活细节，写这个选择带来的新境遇，结尾再次留下一个自然的岔路口
+【选项A】不超过12字的短语，概括第一种走法
+【选项B】不超过12字的短语，与A方向明显不同
+除这三个标签和内容外不要输出任何其他内容。`
+
+/** 结局幕：收束 */
+const SCENE_FINAL = (prev: string, chosen: string) => `你之前写到：
+
+${prev}
+
+读者选择了：【${chosen}】
+
+现在写【结局幕】，这是最后一段，按以下固定格式输出（两个标签必须齐全，顺序固定）：
+【正文】100-160字，第二人称「你」叙述，把这个选择走到的人生落到一个具体的日常画面上，不要完美也不要悲剧，有一个淡淡的落点
+【感悟】1句话，温暖克制，不鸡汤，回应这段人生的主题，能让人有共鸣
+除这两个标签和内容外不要输出任何其他内容。`
 
 // 简单内存级 IP 频控（单实例兜底；生产建议升级 Upstash 滑动窗口）
 const RATE_LIMIT_WINDOW_MS = 60_000
-const RATE_LIMIT_MAX = 10
+const RATE_LIMIT_MAX = 30 // 分幕模式每局 4 次调用，放宽到 30/分钟
 const rateMap = new Map<string, number[]>()
 
 function isRateLimited(ip: string): boolean {
@@ -37,6 +72,50 @@ function isRateLimited(ip: string): boolean {
   rateMap.set(ip, hits)
   if (rateMap.size > 10_000) rateMap.clear()
   return false
+}
+
+/** 从请求体提取分幕参数（history 可选，缺省视为第一幕） */
+function validateSceneBody(body: unknown):
+  | { ok: true; value: { assumption: string; age: string; occupation: string; personality: string; scene: number; history: Array<{ scene: number; choice: 0 | 1 }> } }
+  | { ok: false; error: string } {
+  if (typeof body !== 'object' || body === null) return { ok: false, error: '请求体格式错误' }
+  const b = body as Record<string, unknown>
+
+  const assumption = typeof b.assumption === 'string' ? b.assumption.trim() : ''
+  if (assumption.length < 2 || assumption.length > 50) return { ok: false, error: '假设句长度需在 2-50 字之间' }
+
+  const sceneRaw = b.scene === undefined ? 1 : Number(b.scene)
+  if (!Number.isInteger(sceneRaw) || sceneRaw < 1 || sceneRaw > TOTAL_SCENES) {
+    return { ok: false, error: '幕序号无效' }
+  }
+
+  const historyRaw = Array.isArray(b.history) ? b.history : []
+  const history: Array<{ scene: number; choice: 0 | 1 }> = []
+  for (const item of historyRaw) {
+    if (typeof item !== 'object' || item === null) continue
+    const it = item as Record<string, unknown>
+    const s = Number(it.scene)
+    const c = Number(it.choice)
+    if (Number.isInteger(s) && s >= 1 && s < sceneRaw && (c === 0 || c === 1)) {
+      history.push({ scene: s, choice: c as 0 | 1 })
+    }
+  }
+  if (sceneRaw > 1 && history.length !== sceneRaw - 1) {
+    return { ok: false, error: '路径不完整' }
+  }
+
+  const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
+  return {
+    ok: true,
+    value: {
+      assumption,
+      age: str(b.age, 3),
+      occupation: str(b.occupation, 20),
+      personality: str(b.personality, 20),
+      scene: sceneRaw,
+      history,
+    },
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -64,12 +143,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const parsed = validateGenerateBody(req.body)
+  const parsed = validateSceneBody(req.body)
   if (!parsed.ok) {
     res.status(400).json({ error: parsed.error })
     return
   }
-  const { assumption, age, occupation, personality } = parsed.value
+  const { assumption, age, occupation, personality, scene, history } = parsed.value
 
   if (containsSensitiveWord(assumption) || containsSensitiveWord(occupation + personality)) {
     res.status(422).json({ error: '这个假设超出了档案馆的收录范围，换一个试试吧' })
@@ -82,14 +161,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const userContent = USER_TEMPLATE(
-    assumption,
-    [
-      age ? `\n年龄：${age}` : '',
-      occupation ? `\n职业：${occupation}` : '',
-      personality ? `\n性格：${personality}` : '',
-    ].join(''),
-  )
+  // 组装该幕的 user prompt（history 只回传最近一幕的选择即可，prompt 保持精简）
+  const profile = profileOf(age, occupation, personality)
+  const lastChoice = history.length ? history[history.length - 1] : null
+  let userContent: string
+  if (scene === 1) {
+    userContent = SCENE_FIRST(assumption, profile)
+  } else if (scene < TOTAL_SCENES) {
+    const prevSummary = `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者选择了「${lastChoice?.choice === 0 ? 'A' : 'B'}」方向`
+    userContent = SCENE_MIDDLE(scene, prevSummary, lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
+  } else {
+    const prevSummary = `「${assumption}」的平行人生，前三幕读者分别走了 ${history.map((h) => (h.choice === 0 ? 'A' : 'B')).join('→')}`
+    userContent = SCENE_FINAL(prevSummary, lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
+  }
 
   try {
     const upstream = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
@@ -106,10 +190,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ],
         temperature: 0.9,
         top_p: 0.95,
-        max_tokens: 1500,
+        max_tokens: 900,
         stream: true,
-        // 关键：关闭思考模式。Qwen3-8B 默认思考会先输出数百字 reasoning，
-        // 耗尽前端首 token 超时（15s），且挤压正文 token 预算
         enable_thinking: false,
       }),
     })
@@ -154,7 +236,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 输出侧敏感词兜底：发现即终止连接（此时大部分内容已流出，仅作兜底）
     if (containsSensitiveWord(outputText)) {
-      res.end('【感悟】生成中断，请重试')
+      res.end(scene === TOTAL_SCENES ? '【感悟】生成中断，请重试' : '【选项A】请重试【选项B】请重试')
       return
     }
     res.end()

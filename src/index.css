@@ -138,6 +138,64 @@ body {
   animation: insight-glow-in 1.2s ease-out both;
 }
 
+/* ── 分幕模式：岔路口选项按钮 ── */
+@keyframes choice-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.choice-zone {
+  animation: choice-in 0.8s ease-out both;
+}
+
+.choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 15px 18px;
+  border-radius: 14px;
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+  background: var(--color-card);
+  color: var(--color-ink);
+  border: 0.5px solid var(--color-line);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.15s ease;
+  animation: choice-in 0.7s ease-out both;
+}
+
+.choice-btn:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.choice-btn:hover {
+  border-color: var(--color-primary-strong);
+  box-shadow: 0 0 18px rgba(232, 168, 124, 0.22);
+}
+
+.choice-btn:active {
+  transform: scale(0.98);
+}
+
+.choice-mark {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 12px;
+  background: rgba(232, 168, 124, 0.15);
+  color: var(--color-primary-strong);
+}
+
+/* 走过的幕整体柔化（回显区） */
+.done-scene {
+  opacity: 0.75;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marquee-char {
     opacity: 1;

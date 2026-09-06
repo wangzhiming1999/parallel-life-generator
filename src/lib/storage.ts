@@ -1,30 +1,35 @@
-import { STORAGE_KEY, STORAGE_VERSION, type StoryResult } from '../shared/protocol'
+import { STORAGE_KEY, STORAGE_VERSION, type BranchRunState } from '../shared/protocol'
 
-export function saveLastResult(result: StoryResult): void {
+export function saveBranchRun(state: BranchRunState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(result))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   } catch {
     // 隐私模式/容量满时静默失败
   }
 }
 
-export function loadLastResult(): StoryResult | null {
+export function loadBranchRun(): BranchRunState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<StoryResult>
-    // 版本化校验：版本不匹配或结构缺失即丢弃
+    const parsed = JSON.parse(raw) as Partial<BranchRunState>
     if (parsed.version !== STORAGE_VERSION) return null
-    if (typeof parsed.title !== 'string' || typeof parsed.story !== 'string' || typeof parsed.insight !== 'string') {
+    if (typeof parsed.assumption !== 'string' || !Array.isArray(parsed.scenes) || !Array.isArray(parsed.path)) {
       return null
     }
-    return parsed as StoryResult
+    return parsed as BranchRunState
   } catch {
     try {
       localStorage.removeItem(STORAGE_KEY)
     } catch { /* 忽略 */ }
     return null
   }
+}
+
+export function clearBranchRun(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch { /* 忽略 */ }
 }
 
 // 复制全文（Clipboard API + execCommand 降级，兼容微信内置浏览器/HTTP 非安全上下文）

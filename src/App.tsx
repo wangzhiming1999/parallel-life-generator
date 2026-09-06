@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useGenerate } from './hooks/useGenerate'
+import { useBranch } from './hooks/useBranch'
 import { useAmbientMusic, AmbientMusicButton, type AmbientScene } from './hooks/useAmbientMusic'
 import ParticleBackground from './components/ParticleBackground'
 import MarqueeText from './components/MarqueeText'
-import { ASSUMPTION_MAX_LEN, QUICK_TAGS, type StoryResult } from './shared/protocol'
-import { copyText, loadLastResult, saveLastResult } from './lib/storage'
+import { ASSUMPTION_MAX_LEN, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
+import { copyText, loadBranchRun, saveBranchRun, clearBranchRun } from './lib/storage'
 
-type View = 'input' | 'loading' | 'result'
+type View = 'input' | 'loading' | 'story'
 
 export default function App() {
   const [view, setView] = useState<View>('input')
@@ -16,48 +16,47 @@ export default function App() {
   const [personality, setPersonality] = useState('')
   const [detailOpen, setDetailOpen] = useState(false)
   const [toast, setToast] = useState('')
-  const [cached, setCached] = useState<StoryResult | null>(null)
+  /** 刷新后可续传的存档（输入页展示） */
+  const [savedRun, setSavedRun] = useState<BranchRunState | null>(null)
+  /** 幕间过渡：选择后短暂淡出再进入下一幕 */
+  const [transitioning, setTransitioning] = useState(false)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const music = useAmbientMusic()
 
-  const handleDone = useCallback((result: StoryResult) => {
-    saveLastResult(result)
-    setView('result')
+  const handleRunDone = useCallback((state: BranchRunState) => {
+    saveBranchRun(state)
   }, [])
 
-  const { phase, error, title, paragraphs, insight, streamingIndex, generate, cancel, reset, showResult } = useGenerate({
-    onDone: handleDone,
-  })
+  const branch = useBranch({ onRunDone: handleRunDone })
 
-  // 刷新后恢复最近一条结果
+  // 刷新后恢复存档入口
   useEffect(() => {
-    const last = loadLastResult()
-    if (last) setCached(last)
+    setSavedRun(loadBranchRun())
   }, [])
 
-  const canSubmit = assumption.trim().length >= 2 && phase !== 'loading' && phase !== 'streaming'
+  const canSubmit = assumption.trim().length >= 2 && branch.phase !== 'loading' && branch.phase !== 'streaming'
 
   const handleSubmit = () => {
     if (!canSubmit) return
-    setCached(null)
-    generate({ assumption: assumption.trim(), age, occupation, personality })
+    clearBranchRun()
+    setSavedRun(null)
+    branch.startRun({ assumption: assumption.trim(), age, occupation, personality })
   }
 
-  // phase 变化驱动视图（streaming 时留在结果页布局）
+  // phase 变化驱动视图
   useEffect(() => {
-    if (phase === 'loading') setView('loading')
-    if (phase === 'streaming' || phase === 'done') setView('result')
-    if (phase === 'idle' && error) setView('input')
-  }, [phase, error])
+    if (branch.phase === 'loading' || branch.phase === 'streaming' || branch.phase === 'done') setView('story')
+    if (branch.phase === 'idle' && branch.error) setView('input')
+  }, [branch.phase, branch.error])
 
-  // 背景音乐跟随场景切换
+  // 背景音乐跟随场景
   useEffect(() => {
-    const scene: AmbientScene =
-      view === 'input' ? 'input' : view === 'loading' ? 'generating' : phase === 'done' ? 'result' : 'generating'
+    const isFinal = branch.scene === TOTAL_SCENES && branch.phase === 'done' && branch.insight
+    const scene: AmbientScene = view === 'input' ? 'input' : isFinal ? 'result' : 'generating'
     music.setScene(scene)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, phase])
+  }, [view, branch.phase, branch.scene, branch.insight])
 
   const showToast = (msg: string) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -65,21 +64,41 @@ export default function App() {
     toastTimerRef.current = setTimeout(() => setToast(''), 2000)
   }
 
+  const handleChoose = (choice: 0 | 1) => {
+    if (branch.phase !== 'done' || transitioning || branch.scene >= TOTAL_SCENES) return
+    setTransitioning(true)
+    setTimeout(() => {
+      branch.choose(choice)
+      setTransitioning(false)
+      // 选完滚动回顶部，准备读下一幕
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }, 600)
+  }
+
   const handleCopy = async () => {
-    const full = `${title}\n\n${paragraphs.join('\n\n')}\n\n「${insight}」\n\n—— 平行人生生成器 · 内容由AI生成，仅供娱乐`
+    const last = branch.scenes[branch.scenes.length - 1]
+    if (!last || !last.insight) return
+    const full = `${branch.scenes.map((s) => s.paragraphs.join('\n\n')).join('\n\n')}\n\n「${last.insight}」\n\n—— 平行人生生成器 · 内容由AI生成，仅供娱乐`
     const ok = await copyText(full)
-    showToast(ok ? '已复制到剪贴板' : '复制失败，请长按屏幕手动复制')
+    showToast(ok ? '已复制整段人生' : '复制失败，请长按屏幕手动复制')
   }
 
   const handleAnother = () => {
-    reset()
+    branch.reset()
+    clearBranchRun()
+    setSavedRun(null)
     setView('input')
   }
 
-  const handleReviewCached = (result: StoryResult) => {
-    showResult(result)
-    setView('result')
+  const handleResume = () => {
+    if (!savedRun) return
+    // 存档已完成整局 → 直接展示；未完成 → 恢复到断点
+    branch.resume(savedRun)
+    setView('story')
   }
+
+  const isFinalDone = branch.scene === TOTAL_SCENES && branch.phase === 'done' && branch.insight
+  const doneScenes = branch.scenes.filter((s) => s.scene < branch.scene)
 
   return (
     <div className="min-h-dvh flex flex-col relative" style={{ background: 'var(--color-page)' }}>
@@ -87,19 +106,21 @@ export default function App() {
       <main className="flex-1 w-full max-w-[640px] mx-auto px-5 py-10 relative" style={{ zIndex: 1 }}>
         {view === 'input' && (
           <>
-            {cached && (
+            {savedRun && (
               <section className="mb-8">
                 <p className="text-[13px] mb-3" style={{ color: 'var(--color-ink-secondary)' }}>
-                  你上次推开了一扇门：
+                  你有一段人生走到一半：
                 </p>
                 <button
-                  onClick={() => handleReviewCached(cached)}
+                  onClick={handleResume}
                   className="insight-card w-full text-left cursor-pointer"
                 >
                   <span className="insight-mark">✶</span>
-                  <p className="font-medium text-[18px] m-0" style={{ color: 'var(--color-ink)' }}>{cached.title}</p>
+                  <p className="font-medium text-[18px] m-0" style={{ color: 'var(--color-ink)' }}>
+                    {savedRun.assumption}
+                  </p>
                   <p className="text-[13px] mt-2 mb-0" style={{ color: 'var(--color-ink-secondary)' }}>
-                    点击回看 · 再写一个新的也可以
+                    第 {savedRun.scenes.length} 幕 · 点击继续往下走
                   </p>
                 </button>
               </section>
@@ -109,7 +130,7 @@ export default function App() {
                 平行人生档案馆
               </h1>
               <p className="text-[14px] mt-2 mb-0" style={{ color: 'var(--color-ink-secondary)' }}>
-                写下你的「如果」，解锁另一种人生
+                写下你的「如果」，在每个岔路口做出选择
               </p>
             </header>
 
@@ -175,9 +196,9 @@ export default function App() {
               )}
             </div>
 
-            {error && (
+            {branch.error && (
               <p className="text-[14px] text-center mb-4" style={{ color: 'var(--color-primary-strong)' }}>
-                {error}
+                {branch.error}
               </p>
             )}
 
@@ -198,61 +219,69 @@ export default function App() {
           </>
         )}
 
-        {view === 'loading' && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-            <div className="flex gap-2 mb-6">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="breathing inline-block w-2.5 h-2.5 rounded-full"
-                  style={{ background: 'var(--color-primary)', animationDelay: `${i * 0.25}s` }}
-                />
-              ))}
-            </div>
-            <p className="text-[15px] m-0" style={{ color: 'var(--color-ink-secondary)' }}>
-              正在穿越平行时空…
-            </p>
-            <button
-              onClick={() => {
-                cancel()
-                setView('input')
-              }}
-              className="mt-8 text-[14px] bg-transparent cursor-pointer"
-              style={{ color: 'var(--color-ink-secondary)', border: 'none' }}
-            >
-              取消
-            </button>
-          </div>
-        )}
-
-        {view === 'result' && (
-          <article>
-            <h1
-              className={`text-center text-[24px] font-medium mt-2 mb-8 ${phase === 'streaming' || phase === 'loading' ? 'title-marquee' : ''}`}
-              style={{ color: 'var(--color-ink)', lineHeight: 1.4 }}
-            >
-              {title || '…'}
-              {phase === 'streaming' && streamingIndex === -1 && <span className="marquee-glow" />}
-            </h1>
-            <div className="space-y-5 mb-8">
-              {paragraphs.map((p, i) => (
-                <p key={`${i}-${p.slice(0, 8)}`} className="para m-0" style={{ color: 'var(--color-ink)' }}>
-                  <MarqueeText text={p} active={phase === 'streaming' && streamingIndex === i} />
+        {view === 'story' && (
+          <article
+            style={{
+              opacity: transitioning ? 0 : 1,
+              transition: 'opacity 0.55s ease',
+            }}
+          >
+            {/* 走过的幕（紧凑回显） */}
+            {doneScenes.map((s) => (
+              <section key={s.scene} className="mb-6 done-scene">
+                <p className="text-[11px] tracking-widest mb-1.5" style={{ color: 'var(--color-ink-secondary)', opacity: 0.6 }}>
+                  第{s.scene}幕
                 </p>
-              ))}
-            </div>
-            {insight && (
-              <section
-                className={`insight-card mb-10 ${phase === 'streaming' ? 'insight-card-streaming' : 'insight-glow'}`}
-              >
-                <span className="insight-mark">✶</span>
-                <p className="insight-text">
-                  <MarqueeText text={insight} charInterval={60} active={phase === 'streaming' && streamingIndex === -2} />
-                </p>
+                {s.paragraphs.map((p, i) => (
+                  <p key={i} className="para m-0 text-[14.5px] leading-[1.75]" style={{ color: 'var(--color-ink-secondary)' }}>
+                    {p}
+                  </p>
+                ))}
               </section>
+            ))}
+
+            {/* 当前幕（走马灯逐字点亮） */}
+            <section className="mb-8">
+              <p className="text-[12px] tracking-widest mb-2" style={{ color: 'var(--color-primary-strong)' }}>
+                {branch.scene === TOTAL_SCENES ? '结局' : `第 ${branch.scene} 幕`}
+              </p>
+              {branch.paragraphs.map((p, i) => (
+                <p key={`${branch.scene}-${i}`} className="para m-0 text-[16px]" style={{ color: 'var(--color-ink)' }}>
+                  <MarqueeText text={p} active={branch.phase === 'streaming'} />
+                </p>
+              ))}
+              {branch.insight && (
+                <section className={`insight-card mt-8 ${branch.phase === 'done' ? 'insight-glow' : 'insight-card-streaming'}`}>
+                  <span className="insight-mark">✶</span>
+                  <p className="insight-text">
+                    <MarqueeText text={branch.insight} charInterval={60} active={branch.phase === 'streaming'} />
+                  </p>
+                </section>
+              )}
+            </section>
+
+            {/* 幕尾交互区 */}
+            {branch.phase === 'done' && branch.choices && !isFinalDone && (
+              <div className="choice-zone">
+                <p className="text-center text-[13px] mb-4" style={{ color: 'var(--color-ink-secondary)' }}>
+                  岔路口到了，你的选择是——
+                </p>
+                <div className="flex flex-col gap-3 mb-10">
+                  {branch.choices.map((c, i) => (
+                    <button
+                      key={i}
+                      onClick={() => handleChoose(i as 0 | 1)}
+                      className="choice-btn"
+                    >
+                      <span className="choice-mark">{'①②'[i]}</span>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-            {phase !== 'done' ? (
-              // 流式进行中：柔和的书写状态指示，替代生硬的置灰按钮
+
+            {branch.phase !== 'done' && (
               <div className="flex items-center justify-center gap-2.5 h-[48px] mb-12" aria-live="polite">
                 <span className="inline-flex gap-1.5">
                   {[0, 1, 2].map((i) => (
@@ -264,10 +293,12 @@ export default function App() {
                   ))}
                 </span>
                 <span className="text-[14px]" style={{ color: 'var(--color-ink-secondary)' }}>
-                  {phase === 'loading' ? '正在穿越平行时空…' : '正在书写这段人生…'}
+                  {branch.phase === 'loading' ? '正在翻开下一页…' : '正在书写这段人生…'}
                 </span>
               </div>
-            ) : (
+            )}
+
+            {isFinalDone && (
               <div className="flex gap-3 mb-12">
                 <button
                   onClick={handleCopy}
@@ -279,7 +310,7 @@ export default function App() {
                     cursor: 'pointer',
                   }}
                 >
-                  复制全文
+                  复制这段人生
                 </button>
                 <button
                   onClick={handleAnother}
@@ -291,10 +322,25 @@ export default function App() {
                     cursor: 'pointer',
                   }}
                 >
-                  再写一个
+                  换一种活法
                 </button>
               </div>
             )}
+
+            {/* 幕进度指示 */}
+            <div className="flex justify-center gap-1.5 mb-4">
+              {Array.from({ length: TOTAL_SCENES }, (_, i) => (
+                <span
+                  key={i}
+                  className="inline-block h-1 rounded-full transition-all duration-500"
+                  style={{
+                    width: i + 1 === branch.scene ? 20 : 6,
+                    background: i + 1 <= branch.scene ? 'var(--color-primary-strong)' : 'var(--color-line)',
+                    opacity: i + 1 <= branch.scene ? 1 : 0.6,
+                  }}
+                />
+              ))}
+            </div>
           </article>
         )}
       </main>
