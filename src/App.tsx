@@ -25,7 +25,7 @@ export default function App() {
     setView('result')
   }, [])
 
-  const { phase, error, title, paragraphs, insight, generate, cancel, reset, showResult } = useGenerate({
+  const { phase, error, title, paragraphs, insight, streamingIndex, generate, cancel, reset, showResult } = useGenerate({
     onDone: handleDone,
   })
 
@@ -228,48 +228,69 @@ export default function App() {
           <article>
             <h1 className="text-center text-[24px] font-medium mt-2 mb-8" style={{ color: 'var(--color-ink)', lineHeight: 1.4 }}>
               {title || '…'}
+              {phase === 'streaming' && streamingIndex === -1 && <span className="type-cursor" />}
             </h1>
             <div className="space-y-5 mb-8">
               {paragraphs.map((p, i) => (
                 <p key={`${i}-${p.slice(0, 8)}`} className="para m-0" style={{ color: 'var(--color-ink)' }}>
                   {p}
+                  {phase === 'streaming' && streamingIndex === i && <span className="type-cursor" />}
                 </p>
               ))}
             </div>
             {insight && (
-              <section className="insight-card mb-10">
+              <section className={`insight-card mb-10 ${phase === 'streaming' ? 'insight-card-streaming' : ''}`}>
                 <span className="insight-mark">✶</span>
-                <p className="insight-text">{insight}</p>
+                <p className="insight-text">
+                  {insight}
+                  {phase === 'streaming' && streamingIndex === -2 && <span className="type-cursor" />}
+                </p>
               </section>
             )}
-            <div className="flex gap-3 mb-12">
-              <button
-                onClick={handleCopy}
-                disabled={phase !== 'done'}
-                className="flex-1 h-[48px] rounded-full text-[16px] font-medium"
-                style={{
-                  background: phase === 'done' ? 'var(--color-primary)' : 'var(--color-line)',
-                  color: phase === 'done' ? 'var(--color-btn-text)' : 'var(--color-ink-secondary)',
-                  border: 'none',
-                  cursor: phase === 'done' ? 'pointer' : 'not-allowed',
-                }}
-              >
-                复制全文
-              </button>
-              <button
-                onClick={handleAnother}
-                disabled={phase !== 'done'}
-                className="flex-1 h-[48px] rounded-full text-[16px]"
-                style={{
-                  background: 'transparent',
-                  color: phase === 'done' ? 'var(--color-ink)' : 'var(--color-ink-secondary)',
-                  border: '0.5px solid var(--color-line)',
-                  cursor: phase === 'done' ? 'pointer' : 'not-allowed',
-                }}
-              >
-                再写一个
-              </button>
-            </div>
+            {phase !== 'done' ? (
+              // 流式进行中：柔和的书写状态指示，替代生硬的置灰按钮
+              <div className="flex items-center justify-center gap-2.5 h-[48px] mb-12" aria-live="polite">
+                <span className="inline-flex gap-1.5">
+                  {[0, 1, 2].map((i) => (
+                    <span
+                      key={i}
+                      className="breathing inline-block w-1.5 h-1.5 rounded-full"
+                      style={{ background: 'var(--color-primary-strong)', animationDelay: `${i * 0.25}s` }}
+                    />
+                  ))}
+                </span>
+                <span className="text-[14px]" style={{ color: 'var(--color-ink-secondary)' }}>
+                  {phase === 'loading' ? '正在穿越平行时空…' : '正在书写这段人生…'}
+                </span>
+              </div>
+            ) : (
+              <div className="flex gap-3 mb-12">
+                <button
+                  onClick={handleCopy}
+                  className="flex-1 h-[48px] rounded-full text-[16px] font-medium"
+                  style={{
+                    background: 'var(--color-primary)',
+                    color: 'var(--color-btn-text)',
+                    border: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  复制全文
+                </button>
+                <button
+                  onClick={handleAnother}
+                  className="flex-1 h-[48px] rounded-full text-[16px]"
+                  style={{
+                    background: 'transparent',
+                    color: 'var(--color-ink)',
+                    border: '0.5px solid var(--color-line)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  再写一个
+                </button>
+              </div>
+            )}
           </article>
         )}
       </main>

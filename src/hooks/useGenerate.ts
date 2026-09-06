@@ -19,6 +19,8 @@ export interface GenerateState {
   title: string
   paragraphs: string[]
   insight: string
+  /** 正在流式输出的段落索引（-1 表示标题阶段），供打字光标定位 */
+  streamingIndex: number
 }
 
 export function useGenerate({ onDone }: UseGenerateOptions = {}) {
@@ -27,6 +29,7 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
   const [title, setTitle] = useState('')
   const [paragraphs, setParagraphs] = useState<string[]>([])
   const [insight, setInsight] = useState('')
+  const [streamingIndex, setStreamingIndex] = useState(-1)
   const abortRef = useRef<AbortController | null>(null)
   const firstTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -50,6 +53,7 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
     setParagraphs([])
     setInsight('')
     setError('')
+    setStreamingIndex(-1)
     setPhase('idle')
   }, [clearTimers])
 
@@ -62,6 +66,7 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
       setParagraphs(result.story.split('\n').map((s) => s.trim()).filter(Boolean))
       setInsight(result.insight)
       setError('')
+      setStreamingIndex(-1)
       setPhase('done')
     },
     [clearTimers],
@@ -85,6 +90,7 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
       setParagraphs([])
       setInsight('')
       setError('')
+      setStreamingIndex(-1)
       setPhase('loading')
 
       // 首 token 超时：20s 内没有任何输出则提示
@@ -161,6 +167,10 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
           if (acc.title) setTitle(acc.title)
           if (acc.paragraphs.length) setParagraphs(acc.paragraphs)
           if (acc.insight) setInsight(acc.insight)
+          // 光标定位：感悟输出中 → 段落数之后；正文输出中 → 当前最后一段；否则标题
+          if (acc.insight) setStreamingIndex(-2)
+          else if (acc.paragraphs.length) setStreamingIndex(acc.paragraphs.length - 1)
+          else setStreamingIndex(-1)
         }
 
         clearTimers()
@@ -173,6 +183,7 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
         setTitle(finalTitle)
         setParagraphs(finalParagraphs)
         setInsight(finalInsight)
+        setStreamingIndex(-1)
         setPhase('done')
         onDone?.({
           title: finalTitle,
@@ -193,5 +204,5 @@ export function useGenerate({ onDone }: UseGenerateOptions = {}) {
     [clearTimers, onDone],
   )
 
-  return { phase, error, title, paragraphs, insight, generate, cancel, reset, showResult }
+  return { phase, error, title, paragraphs, insight, streamingIndex, generate, cancel, reset, showResult }
 }

@@ -77,6 +77,29 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* 流式打字光标：跟随输出位置呼吸闪烁 */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.1; }
+}
+
+.type-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  background: var(--color-primary-strong);
+  border-radius: 1px;
+  animation: cursor-blink 0.9s ease-in-out infinite;
+}
+
+/* 感悟卡片流式阶段：柔入不抢戏，输出完成后自然过渡到强调态 */
+.insight-card-streaming {
+  opacity: 0.75;
+  transition: opacity 0.6s ease;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .para {
     animation: para-in 0.5s ease-out both;
