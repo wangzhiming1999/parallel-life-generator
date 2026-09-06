@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useGenerate } from './hooks/useGenerate'
 import { useAmbientMusic, AmbientMusicButton, type AmbientScene } from './hooks/useAmbientMusic'
 import ParticleBackground from './components/ParticleBackground'
+import MarqueeText from './components/MarqueeText'
 import { ASSUMPTION_MAX_LEN, QUICK_TAGS, type StoryResult } from './shared/protocol'
 import { copyText, loadLastResult, saveLastResult } from './lib/storage'
 
@@ -226,24 +227,27 @@ export default function App() {
 
         {view === 'result' && (
           <article>
-            <h1 className="text-center text-[24px] font-medium mt-2 mb-8" style={{ color: 'var(--color-ink)', lineHeight: 1.4 }}>
+            <h1
+              className={`text-center text-[24px] font-medium mt-2 mb-8 ${phase === 'streaming' || phase === 'loading' ? 'title-marquee' : ''}`}
+              style={{ color: 'var(--color-ink)', lineHeight: 1.4 }}
+            >
               {title || '…'}
-              {phase === 'streaming' && streamingIndex === -1 && <span className="type-cursor" />}
+              {phase === 'streaming' && streamingIndex === -1 && <span className="marquee-glow" />}
             </h1>
             <div className="space-y-5 mb-8">
               {paragraphs.map((p, i) => (
                 <p key={`${i}-${p.slice(0, 8)}`} className="para m-0" style={{ color: 'var(--color-ink)' }}>
-                  {p}
-                  {phase === 'streaming' && streamingIndex === i && <span className="type-cursor" />}
+                  <MarqueeText text={p} active={phase === 'streaming' && streamingIndex === i} />
                 </p>
               ))}
             </div>
             {insight && (
-              <section className={`insight-card mb-10 ${phase === 'streaming' ? 'insight-card-streaming' : ''}`}>
+              <section
+                className={`insight-card mb-10 ${phase === 'streaming' ? 'insight-card-streaming' : 'insight-glow'}`}
+              >
                 <span className="insight-mark">✶</span>
                 <p className="insight-text">
-                  {insight}
-                  {phase === 'streaming' && streamingIndex === -2 && <span className="type-cursor" />}
+                  <MarqueeText text={insight} charInterval={60} active={phase === 'streaming' && streamingIndex === -2} />
                 </p>
               </section>
             )}

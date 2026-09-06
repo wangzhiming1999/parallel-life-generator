@@ -77,6 +77,79 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ===== 走马灯式流式输出：字符逐个点亮 ===== */
+@keyframes char-light-up {
+  from {
+    opacity: 0.12;
+    text-shadow: none;
+    filter: blur(0.5px);
+  }
+  60% {
+    opacity: 1;
+    text-shadow: 0 0 12px var(--color-primary-strong);
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    text-shadow: none;
+  }
+}
+
+.marquee-char {
+  opacity: 0.12;
+  animation: char-light-up 0.7s ease-out forwards;
+}
+
+/* 流式输出前沿的暖光晕（跟随输出位置的呼吸光点） */
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 0.9; transform: scale(1.2); }
+}
+
+.marquee-glow {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--color-primary-strong);
+  box-shadow: 0 0 10px 2px var(--color-primary-strong);
+  animation: glow-pulse 1.1s ease-in-out infinite;
+}
+
+/* 标题走马灯：整体柔入 + 短暂光晕扫过 */
+@keyframes title-marquee {
+  from { opacity: 0; letter-spacing: 0.35em; filter: blur(3px); }
+  to { opacity: 1; letter-spacing: 0.02em; filter: blur(0); }
+}
+
+.title-marquee {
+  animation: title-marquee 1.4s ease-out both;
+}
+
+/* 感悟卡光芒渐亮 */
+@keyframes insight-glow-in {
+  from { opacity: 0; box-shadow: 0 0 0 rgba(232, 168, 124, 0); }
+  to { opacity: 1; box-shadow: 0 0 24px rgba(232, 168, 124, 0.18); }
+}
+
+.insight-glow {
+  animation: insight-glow-in 1.2s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-char {
+    opacity: 1;
+    animation: none;
+  }
+  .marquee-glow,
+  .title-marquee,
+  .insight-glow {
+    animation: none;
+  }
+}
+
 /* 流式打字光标：跟随输出位置呼吸闪烁 */
 @keyframes cursor-blink {
   0%, 100% { opacity: 1; }
