@@ -392,23 +392,33 @@ export default function App() {
             )}
 
             {/* 走过的幕（紧凑回显） */}
-            {doneScenes.map((s) => (
-              <section key={s.scene} className="mb-6 done-scene">
-                <p className="text-[11px] tracking-widest mb-1.5" style={{ color: 'var(--color-ink-secondary)', opacity: 0.6 }}>
-                  第{s.scene}幕
-                </p>
-                {s.paragraphs.map((p, i) => (
-                  <p key={i} className="para m-0 text-[14.5px] leading-[1.75]" style={{ color: 'var(--color-ink-secondary)' }}>
-                    {p}
+            {doneScenes.map((s) => {
+              const step = branch.path.find((item) => item.scene === s.scene)
+              const decision = step?.decision ?? (step ? s.choices?.[step.choice] : undefined)
+              return <div key={s.scene} className="life-entry">
+                <section className="mb-6 done-scene">
+                  <p className="text-[11px] tracking-widest mb-1.5" style={{ color: 'var(--color-ink-secondary)', opacity: 0.6 }}>
+                    人生片段 {String(s.scene).padStart(2, '0')} · {getLifeStage(s.scene)}
                   </p>
-                ))}
-              </section>
-            ))}
+                  {s.paragraphs.map((p, i) => (
+                    <p key={i} className="para m-0 text-[14.5px] leading-[1.75]" style={{ color: 'var(--color-ink-secondary)' }}>
+                      {p}
+                    </p>
+                  ))}
+                </section>
+                {decision && (
+                  <div className="decision-bridge">
+                    <span>你的决定</span>
+                    <strong>{decision}</strong>
+                  </div>
+                )}
+              </div>
+            })}
 
             {/* 当前幕（走马灯逐字点亮） */}
             <section className="mb-8">
               <p className="text-[12px] tracking-widest mb-2" style={{ color: 'var(--color-primary-strong)' }}>
-                {branch.scene === TOTAL_SCENES ? '结局' : `第 ${branch.scene} 幕`}
+                {branch.scene === TOTAL_SCENES ? '人生终章' : `人生片段 ${String(branch.scene).padStart(2, '0')} · ${getLifeStage(branch.scene)}`}
               </p>
               {branch.paragraphs.map((p, i) => (
                 <p key={`${branch.scene}-${i}`} className="para m-0 text-[16px]" style={{ color: 'var(--color-ink)' }}>
@@ -595,12 +605,19 @@ export default function App() {
               <article className="caught-archive">
                 <p className="archive-code">{caughtArchive.archiveCode} · 被打捞 {caughtArchive.salvageCount} 次</p>
                 <h2>{caughtArchive.assumption}</h2>
-                {caughtArchive.scenes.map((scene) => (
-                  <section key={scene.scene}>
-                    <small>第 {scene.scene} 幕</small>
-                    {scene.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-                  </section>
-                ))}
+                {caughtArchive.scenes.map((scene) => {
+                  const step = caughtArchive.path.find((item) => item.scene === scene.scene)
+                  const decision = step?.decision ?? (step ? scene.choices?.[step.choice] : undefined)
+                  return (
+                    <div key={scene.scene} className="life-entry">
+                      <section>
+                        <small>{scene.scene === TOTAL_SCENES ? '人生终章' : `人生片段 ${String(scene.scene).padStart(2, '0')} · ${getLifeStage(scene.scene)}`}</small>
+                        {scene.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                      </section>
+                      {decision && <div className="decision-bridge"><span>在这个岔路，你选择了</span><strong>{decision}</strong></div>}
+                    </div>
+                  )
+                })}
                 <blockquote>{caughtArchive.insight}</blockquote>
                 <button onClick={handleSalvage}>把它放回海里，再捞一份</button>
               </article>
