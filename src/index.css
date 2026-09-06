@@ -347,3 +347,49 @@ body {
   .universe-console { top: 6px; }
   .pulse-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+.salvage-entry { display: flex; align-items: center; gap: 12px; width: 100%; margin: -18px 0 24px; padding: 13px 15px; text-align: left; border: 1px solid var(--color-line); border-radius: 12px; background: color-mix(in srgb, var(--color-card) 80%, transparent); color: var(--color-ink); cursor: pointer; }
+.salvage-entry > span { color: var(--color-primary-strong); font-size: 26px; }
+.salvage-entry div { display: flex; flex: 1; flex-direction: column; }
+.salvage-entry strong { font-size: 14px; }
+.salvage-entry small { color: var(--color-ink-secondary); font-size: 11px; }
+.salvage-entry em { color: var(--color-primary-strong); font-size: 12px; font-style: normal; }
+.archive-destination-button { display: block; width: 100%; min-height: 50px; margin-top: 12px; border: 1px solid var(--color-primary); border-radius: 999px; background: var(--color-card); color: var(--color-primary-strong); font-size: 15px; font-weight: 600; cursor: pointer; }
+.archive-destination-button:disabled { opacity: .65; cursor: default; }
+
+.destination-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 20px; background: rgba(20, 17, 14, .58); backdrop-filter: blur(8px); }
+.destination-dialog { position: relative; width: min(520px, 100%); padding: 28px; border-radius: 18px; background: var(--color-page); box-shadow: 0 24px 80px rgba(0,0,0,.28); }
+.destination-dialog > p, .destination-dialog h2 { margin: 0; text-align: center; }
+.destination-dialog > p { color: var(--color-primary-strong); font-size: 12px; letter-spacing: .12em; }
+.destination-dialog h2 { margin-top: 4px; font-size: 22px; }
+.destination-close { position: absolute; top: 10px; right: 12px; width: 34px; height: 34px; border: 0; background: transparent; color: var(--color-ink-secondary); font-size: 22px; cursor: pointer; }
+.destination-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 22px; }
+.destination-options button { display: flex; min-height: 170px; padding: 20px 16px; flex-direction: column; align-items: center; justify-content: center; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-card); color: var(--color-ink); cursor: pointer; transition: transform .2s, border-color .2s; }
+.destination-options button:hover { transform: translateY(-2px); border-color: var(--color-primary-strong); }
+.destination-options button > span { color: var(--color-primary-strong); font-size: 34px; }
+.destination-options strong { margin-top: 6px; font-size: 16px; }
+.destination-options small { margin-top: 7px; color: var(--color-ink-secondary); font-size: 11px; line-height: 1.6; }
+.destination-message { margin-top: 14px !important; color: var(--color-primary-strong) !important; letter-spacing: 0 !important; }
+
+.ocean-back { border: 0; background: transparent; color: var(--color-ink-secondary); cursor: pointer; }
+.ocean-view > header { margin: 28px 0; text-align: center; }
+.ocean-view > header span { color: var(--color-primary-strong); font-size: 38px; }
+.ocean-view > header p, .ocean-view > header h1 { margin: 0; }
+.ocean-view > header p { color: var(--color-primary-strong); font-size: 12px; letter-spacing: .2em; }
+.ocean-view > header h1 { margin-top: 4px; font-size: 24px; }
+.ocean-status, .ocean-empty { padding: 60px 20px; text-align: center; color: var(--color-ink-secondary); }
+.ocean-empty button, .caught-archive > button { padding: 10px 18px; border: 1px solid var(--color-primary); border-radius: 999px; background: transparent; color: var(--color-primary-strong); cursor: pointer; }
+.caught-archive { padding: 24px; border: 1px solid var(--color-line); border-radius: 16px; background: var(--color-card); }
+.archive-code { color: var(--color-primary-strong); font-size: 11px; letter-spacing: .1em; }
+.caught-archive h2 { margin: 6px 0 28px; font-size: 20px; }
+.caught-archive section { margin-bottom: 22px; }
+.caught-archive section small { color: var(--color-primary-strong); }
+.caught-archive section p { margin: 4px 0 0; font-size: 15px; line-height: 1.8; }
+.caught-archive blockquote { margin: 30px 0; padding: 18px; border-left: 2px solid var(--color-primary); background: var(--color-page); color: var(--color-primary-strong); }
+
+@media (max-width: 480px) {
+  .destination-options { grid-template-columns: 1fr; }
+  .destination-options button { min-height: 125px; }
+  .destination-dialog { max-height: calc(100dvh - 32px); overflow-y: auto; padding: 24px 18px; }
+  .caught-archive { padding: 18px; }
+}

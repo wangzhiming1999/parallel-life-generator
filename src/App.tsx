@@ -6,8 +6,9 @@ import MarqueeText from './components/MarqueeText'
 import { ASSUMPTION_MAX_LEN, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
 import { copyText, loadBranchRun, saveBranchRun, clearBranchRun } from './lib/storage'
 import { getLifeStage, getUniversePulse, pathDistance, type LifeDimension } from './lib/universe'
+import type { ArchiveResponse, PublicArchive } from './shared/archive'
 
-type View = 'input' | 'loading' | 'story'
+type View = 'input' | 'loading' | 'story' | 'ocean'
 
 export default function App() {
   const [view, setView] = useState<View>('input')
@@ -27,6 +28,11 @@ export default function App() {
   const [previousUniverse, setPreviousUniverse] = useState<BranchRunState | null>(null)
   const [customDecisionOpen, setCustomDecisionOpen] = useState(false)
   const [customDecision, setCustomDecision] = useState('')
+  const [archiveChoiceOpen, setArchiveChoiceOpen] = useState(false)
+  const [archiveBusy, setArchiveBusy] = useState(false)
+  const [caughtArchive, setCaughtArchive] = useState<PublicArchive | null>(null)
+  const [oceanMessage, setOceanMessage] = useState('')
+  const [publishedArchiveCode, setPublishedArchiveCode] = useState('')
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const music = useAmbientMusic()
@@ -106,6 +112,7 @@ export default function App() {
     setMapOpen(false)
     setCustomDecision('')
     setCustomDecisionOpen(false)
+    setPublishedArchiveCode('')
     setResumed(false)
     branch.fork(scene, originalChoice === 0 ? 1 : 0)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -126,6 +133,7 @@ export default function App() {
     setResumed(false)
     setPreviousUniverse(null)
     setMapOpen(false)
+    setPublishedArchiveCode('')
     setView('input')
   }
 
@@ -135,6 +143,60 @@ export default function App() {
     branch.resume(savedRun)
     setResumed(true)
     setView('story')
+  }
+
+  const handleThrowToSea = async () => {
+    if (!branch.insight || archiveBusy) return
+    setArchiveBusy(true)
+    setOceanMessage('')
+    try {
+      const response = await fetch('/api/archives', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assumption: savedRun?.assumption ?? assumption,
+          universeTitle: pulse.title,
+          scenes: branch.scenes,
+          path: branch.path,
+          insight: branch.insight,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload?.error?.message || '投递失败')
+      clearBranchRun()
+      setArchiveChoiceOpen(false)
+      setPublishedArchiveCode(payload.data.archiveCode)
+      showToast(`档案 ${payload.data.archiveCode} 已经开始漂流`)
+    } catch (error) {
+      setOceanMessage(error instanceof Error ? error.message : '海面起了风浪，请稍后再试')
+    } finally {
+      setArchiveBusy(false)
+    }
+  }
+
+  const handleLaunchToGalaxy = () => {
+    if (!window.confirm('发射后不会上传、不会保存，也无法找回。确认让这段人生消失在银河里吗？')) return
+    setArchiveChoiceOpen(false)
+    handleAnother()
+    showToast('档案已化作一颗遥远的星')
+  }
+
+  const handleSalvage = async () => {
+    setView('ocean')
+    setArchiveBusy(true)
+    setOceanMessage('正在听海浪里的声音…')
+    try {
+      const response = await fetch('/api/archives')
+      const payload = await response.json() as ArchiveResponse & { error?: { message?: string } }
+      if (!response.ok) throw new Error(payload.error?.message || '没有捞到档案')
+      setCaughtArchive(payload.data)
+      setOceanMessage('')
+    } catch (error) {
+      setCaughtArchive(null)
+      setOceanMessage(error instanceof Error ? error.message : '暂时没有捞到档案')
+    } finally {
+      setArchiveBusy(false)
+    }
   }
 
   const isFinalDone = branch.scene === TOTAL_SCENES && branch.phase === 'done' && branch.insight
@@ -176,6 +238,12 @@ export default function App() {
                 写下你的「如果」，在每个岔路口做出选择
               </p>
             </header>
+
+            <button onClick={handleSalvage} className="salvage-entry">
+              <span>≈</span>
+              <div><strong>去档案海打捞</strong><small>读一段陌生人的平行人生</small></div>
+              <em>去看看</em>
+            </button>
 
             <div
               className="rounded-xl p-4 mb-5"
@@ -473,6 +541,13 @@ export default function App() {
                 </button>
                 </div>
                 <button onClick={handleAnother} className="new-life-button">开启全新假设</button>
+                <button
+                  onClick={() => setArchiveChoiceOpen(true)}
+                  className="archive-destination-button"
+                  disabled={Boolean(publishedArchiveCode)}
+                >
+                  {publishedArchiveCode ? `${publishedArchiveCode} · 已在海上漂流` : '决定这份档案的归宿'}
+                </button>
               </div>
             )}
 
@@ -500,6 +575,29 @@ export default function App() {
             </div>
           </article>
         )}
+
+        {view === 'ocean' && (
+          <section className="ocean-view">
+            <button className="ocean-back" onClick={() => setView('input')}>← 返回档案馆</button>
+            <header><span>≈</span><p>档案海</p><h1>{caughtArchive ? caughtArchive.universeTitle : '听一听陌生人的人生'}</h1></header>
+            {archiveBusy && <p className="ocean-status" aria-live="polite">{oceanMessage}</p>}
+            {!archiveBusy && !caughtArchive && <div className="ocean-empty"><p>{oceanMessage}</p><button onClick={handleSalvage}>再撒一次网</button></div>}
+            {caughtArchive && (
+              <article className="caught-archive">
+                <p className="archive-code">{caughtArchive.archiveCode} · 被打捞 {caughtArchive.salvageCount} 次</p>
+                <h2>{caughtArchive.assumption}</h2>
+                {caughtArchive.scenes.map((scene) => (
+                  <section key={scene.scene}>
+                    <small>第 {scene.scene} 幕</small>
+                    {scene.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                  </section>
+                ))}
+                <blockquote>{caughtArchive.insight}</blockquote>
+                <button onClick={handleSalvage}>把它放回海里，再捞一份</button>
+              </article>
+            )}
+          </section>
+        )}
       </main>
 
       <footer className="pb-6 pt-2 text-center">
@@ -518,6 +616,25 @@ export default function App() {
       )}
 
       <AmbientMusicButton enabled={music.enabled} onToggle={music.toggle} />
+
+      {archiveChoiceOpen && (
+        <div className="destination-backdrop" role="presentation" onMouseDown={() => setArchiveChoiceOpen(false)}>
+          <section className="destination-dialog" role="dialog" aria-modal="true" aria-labelledby="destination-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button className="destination-close" onClick={() => setArchiveChoiceOpen(false)} aria-label="关闭">×</button>
+            <p>旅程结束了</p>
+            <h2 id="destination-title">这份人生，要去哪里？</h2>
+            <div className="destination-options">
+              <button onClick={handleThrowToSea} disabled={archiveBusy}>
+                <span>≈</span><strong>丢入大海</strong><small>匿名公开保存，可能被陌生人打捞阅读</small>
+              </button>
+              <button onClick={handleLaunchToGalaxy} disabled={archiveBusy}>
+                <span>✦</span><strong>发射到银河</strong><small>不上传、不保存，离开后无法找回</small>
+              </button>
+            </div>
+            {oceanMessage && <p className="destination-message" aria-live="polite">{oceanMessage}</p>}
+          </section>
+        </div>
+      )}
     </div>
   )
 }
