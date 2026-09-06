@@ -206,7 +206,7 @@ export default function App() {
   const dimensions = Object.entries(pulse.values) as Array<[LifeDimension, number]>
 
   return (
-    <div className="min-h-dvh flex flex-col relative" style={{ background: 'var(--color-page)' }}>
+    <div className={`memory-world memory-world--${view} min-h-dvh flex flex-col relative`}>
       <ParticleBackground />
       <main className="flex-1 w-full max-w-[640px] mx-auto px-5 py-10 relative" style={{ zIndex: 1 }}>
         {view === 'input' && (
@@ -231,6 +231,7 @@ export default function App() {
               </section>
             )}
             <header className="text-center mb-10">
+              <p className="archive-eyebrow">MEMORY ARCHIVE · 1999—∞</p>
               <h1 className="text-[26px] font-medium m-0" style={{ color: 'var(--color-ink)', lineHeight: 1.4 }}>
                 平行人生档案馆
               </h1>

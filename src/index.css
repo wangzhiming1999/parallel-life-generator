@@ -348,6 +348,136 @@ body {
   .pulse-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ── 私人记忆档案室 ───────────────────────────────────────────── */
+:root {
+  --color-page: #d9cbb7;
+  --color-primary: #b88768;
+  --color-primary-strong: #864c3b;
+  --color-ink: #3b3129;
+  --color-ink-secondary: #75685d;
+  --color-card: #eee3d0;
+  --color-line: #bcae9a;
+  --color-btn-text: #2f241d;
+  color-scheme: light;
+}
+
+body {
+  font-family: "Songti SC", "Noto Serif CJK SC", SimSun, Georgia, serif;
+  background:
+    radial-gradient(circle at 14% 8%, rgba(255, 246, 220, .72), transparent 28rem),
+    radial-gradient(circle at 88% 72%, rgba(115, 73, 50, .15), transparent 34rem),
+    #d9cbb7;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .2;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.32'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+.memory-world {
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(71, 48, 36, .06) 1px, transparent 1px) center / 34px 100%,
+    transparent !important;
+}
+
+.memory-world::before,
+.memory-world::after {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  width: 230px;
+  height: 290px;
+  border: 10px solid rgba(245, 235, 216, .72);
+  background: linear-gradient(145deg, rgba(107, 82, 63, .22), rgba(222, 199, 161, .12));
+  box-shadow: 0 10px 25px rgba(62, 45, 34, .18);
+  opacity: .35;
+  pointer-events: none;
+}
+.memory-world::before { top: -100px; left: -90px; transform: rotate(-12deg); }
+.memory-world::after { right: -100px; bottom: -120px; transform: rotate(9deg); }
+
+.memory-world main {
+  max-width: 690px;
+  margin-block: 26px;
+  padding: 54px 54px 64px;
+  background:
+    linear-gradient(rgba(132, 93, 62, .075) 1px, transparent 1px) 0 74px / 100% 31px,
+    linear-gradient(100deg, rgba(255,255,255,.26), transparent 22%),
+    #e9ddc8;
+  border: 1px solid rgba(105, 83, 65, .24);
+  box-shadow: 0 24px 70px rgba(68, 48, 35, .19), inset 0 0 70px rgba(139, 100, 70, .06);
+}
+
+.memory-world main::before {
+  content: "档案编号  PL · 06 / 09";
+  display: block;
+  margin: -28px 0 34px;
+  color: rgba(99, 70, 54, .55);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: .18em;
+}
+
+.archive-eyebrow { margin: 0 0 10px; color: var(--color-primary-strong); font-family: ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: .22em; }
+.memory-world h1, .memory-world h2, .universe-title { font-family: STKaiti, KaiTi, "Songti SC", serif; letter-spacing: .04em; }
+.memory-world--input header h1 { position: relative; display: inline-block; font-size: 34px !important; }
+.memory-world--input header h1::after { content: ""; position: absolute; left: 8%; right: -7%; bottom: -8px; height: 8px; background: rgba(134, 76, 59, .17); transform: rotate(-1deg); }
+
+.memory-world textarea,
+.memory-world input {
+  font-family: STKaiti, KaiTi, "Songti SC", serif;
+}
+
+.memory-world--input main > div.rounded-xl {
+  position: relative;
+  border: 0 !important;
+  border-radius: 2px !important;
+  background: rgba(245, 237, 221, .68) !important;
+  box-shadow: inset 4px 0 0 rgba(134, 76, 59, .28), 0 7px 22px rgba(72, 51, 38, .08);
+}
+
+.tag { border-radius: 3px; border-style: dashed; background: rgba(239, 226, 205, .72); transform: rotate(-.35deg); }
+.tag:nth-child(even) { transform: rotate(.45deg); }
+.salvage-entry { border-radius: 2px; border-style: dashed; background: rgba(219, 226, 220, .46); box-shadow: 4px 5px 0 rgba(104, 90, 74, .08); transform: rotate(-.25deg); }
+
+.memory-world button { font-family: inherit; }
+.memory-world--input main > button.w-full { border-radius: 3px !important; background: #805241 !important; color: #f2e7d4 !important; box-shadow: 4px 5px 0 #bca990; letter-spacing: .12em; }
+
+.universe-console { position: relative; top: auto; border-radius: 3px; background: rgba(236, 224, 204, .88); border-color: rgba(119, 85, 61, .35); box-shadow: 6px 7px 0 rgba(102, 76, 58, .09); backdrop-filter: none; }
+.universe-console::after { content: "RECOLLECTION"; position: absolute; top: 8px; right: 104px; color: rgba(115, 82, 60, .24); font-family: ui-monospace, monospace; font-size: 8px; letter-spacing: .16em; transform: rotate(-4deg); }
+.map-button, .choice-btn, .timeline-map, .timeline-nodes button, .insight-card, .caught-archive { border-radius: 3px; }
+.choice-btn { background: rgba(241, 231, 213, .78); box-shadow: 3px 4px 0 rgba(95, 69, 51, .08); }
+.choice-mark { border-radius: 2px; font-family: ui-monospace, monospace; }
+.done-scene { position: relative; padding-left: 18px; opacity: .68; border-left: 1px solid rgba(119, 88, 67, .22); }
+.insight-card { position: relative; background: rgba(226, 211, 187, .64); border-style: double; }
+.insight-card::before { content: "摘录"; position: absolute; top: -10px; left: 16px; padding: 0 6px; background: #e9ddc8; color: var(--color-primary-strong); font-size: 10px; letter-spacing: .16em; }
+.archive-destination-button { border-radius: 3px; border-style: dashed; background: rgba(232, 217, 195, .8); }
+
+.destination-backdrop { background: rgba(39, 31, 27, .72); }
+.destination-dialog { border-radius: 4px; background: #e8dbc5; box-shadow: 0 30px 100px rgba(0,0,0,.4); }
+.destination-dialog::before { content: ""; position: absolute; inset: 9px; pointer-events: none; border: 1px solid rgba(115, 78, 57, .22); }
+.destination-options button { border-radius: 2px; background: rgba(244, 234, 217, .65); }
+.destination-options button:last-child { background: #3b3634; color: #e8ddca; border-color: #57504d; }
+.destination-options button:last-child small { color: #aaa099; }
+
+.memory-world--ocean { background: radial-gradient(circle at 50% 120%, rgba(87, 116, 120, .36), transparent 55%) !important; }
+.memory-world--ocean main { background: linear-gradient(rgba(80, 107, 108, .08) 1px, transparent 1px) 0 74px / 100% 31px, #d8d5c7; }
+.caught-archive { background: rgba(232, 228, 212, .76); box-shadow: 7px 9px 0 rgba(62, 75, 73, .1); }
+
+@media (max-width: 740px) {
+  .memory-world main { margin-block: 0; padding: 42px 22px 56px; border-inline: 0; box-shadow: none; }
+  .memory-world main::before { margin-top: -24px; }
+  .memory-world::before, .memory-world::after { display: none; }
+  .memory-world--input header h1 { font-size: 30px !important; }
+}
+
 .salvage-entry { display: flex; align-items: center; gap: 12px; width: 100%; margin: -18px 0 24px; padding: 13px 15px; text-align: left; border: 1px solid var(--color-line); border-radius: 12px; background: color-mix(in srgb, var(--color-card) 80%, transparent); color: var(--color-ink); cursor: pointer; }
 .salvage-entry > span { color: var(--color-primary-strong); font-size: 26px; }
 .salvage-entry div { display: flex; flex: 1; flex-direction: column; }

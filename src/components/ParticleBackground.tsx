@@ -44,23 +44,23 @@ export default function ParticleBackground() {
     }
 
     const seed = () => {
-      // 密度随面积缩放，移动端约 40 颗，桌面约 90 颗
-      const count = Math.min(90, Math.floor((window.innerWidth * window.innerHeight) / 16000))
+      // 像旧胶片里漂浮的细尘，不做通用的星光粒子。
+      const count = Math.min(65, Math.floor((window.innerWidth * window.innerHeight) / 22000))
       particles = Array.from({ length: count }, () => ({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
-        r: 0.8 + Math.random() * 2.2,
+        r: 0.45 + Math.random() * 1.15,
         vx: (Math.random() - 0.5) * 0.12,
         vy: -(0.08 + Math.random() * 0.25), // 缓慢上浮
-        alpha: 0.15 + Math.random() * 0.4,
+        alpha: 0.08 + Math.random() * 0.22,
         phase: Math.random() * Math.PI * 2,
-        hue: 28 + Math.random() * 14, // 28-42: 暖金~琥珀
+        hue: 28 + Math.random() * 8,
       }))
     }
 
     const drawFrame = (t: number) => {
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight)
-      const baseAlpha = darkMode ? 1 : 0.55
+      const baseAlpha = darkMode ? 0.7 : 0.5
 
       for (const p of particles) {
         // 呼吸闪烁
