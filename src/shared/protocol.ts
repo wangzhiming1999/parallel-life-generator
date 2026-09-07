@@ -21,6 +21,20 @@ export interface StoryMemoryScene {
   decision?: string
 }
 
+/** 模型每幕更新的长期事实账本；只用于续写，不展示给读者。 */
+export interface LifeLedger {
+  currentAge: string
+  currentTime: string
+  location: string
+  occupation: string
+  people: string[]
+  irreversibleFacts: string[]
+  objects: string[]
+  openThreads: string[]
+  recentConsequences: string[]
+  usedMotifs: string[]
+}
+
 /** 幕间请求体：报告当前进度与已做选择，让后端续写下一幕 */
 export interface SceneRequest extends GenerateRequest {
   /** 当前请求的幕序号：1..TOTAL_SCENES（最后一幕为结局幕） */
@@ -29,6 +43,8 @@ export interface SceneRequest extends GenerateRequest {
   history: DecisionStep[]
   /** 最近几幕的真实正文，用来保持人物、地点和动作连续。 */
   context?: StoryMemoryScene[]
+  /** 上一幕确认过的长期事实，避免职业、关系和物件状态在长篇中漂移。 */
+  ledger?: LifeLedger
 }
 
 export type Phase = 'idle' | 'loading' | 'streaming' | 'done'
@@ -41,6 +57,8 @@ export interface SceneData {
   choices: [string, string] | null
   /** 结局幕的感悟；非结局幕为 null */
   insight: string | null
+  /** 隐藏的长期事实账本。旧存档没有该字段时仍可正常读取。 */
+  ledger?: LifeLedger | null
 }
 
 /** 一局完整存档 */
@@ -63,6 +81,7 @@ export const SECTION_TAGS = {
   optionA: '【选项A】',
   optionB: '【选项B】',
   insight: '【感悟】',
+  ledger: '【人生档案】',
 } as const
 
 export const TOTAL_SCENES = 18 // 前 17 幕分支 + 第 18 幕结局（完整人生）
@@ -72,22 +91,26 @@ export function parseSceneText(text: string): {
   paragraphs: string[]
   choices: [string, string] | null
   insight: string | null
+  ledger: LifeLedger | null
 } {
   const storyIdx = text.indexOf(SECTION_TAGS.story)
   const aIdx = text.indexOf(SECTION_TAGS.optionA)
   const bIdx = text.indexOf(SECTION_TAGS.optionB)
   const insIdx = text.indexOf(SECTION_TAGS.insight)
+  const ledgerIdx = text.indexOf(SECTION_TAGS.ledger)
+  const nextSection = (...indexes: number[]) => indexes.filter((index) => index >= 0).sort((a, b) => a - b)[0]
 
   const story =
     storyIdx >= 0
-      ? text.slice(storyIdx + SECTION_TAGS.story.length, aIdx >= 0 ? aIdx : insIdx >= 0 ? insIdx : undefined)
+      ? text.slice(storyIdx + SECTION_TAGS.story.length, nextSection(aIdx, insIdx, ledgerIdx))
       : ''
   const choiceA =
     aIdx >= 0
       ? text.slice(aIdx + SECTION_TAGS.optionA.length, bIdx >= 0 ? bIdx : undefined).trim().split('\n')[0]
       : ''
-  const choiceB = bIdx >= 0 ? text.slice(bIdx + SECTION_TAGS.optionB.length, insIdx >= 0 ? insIdx : undefined).trim().split('\n')[0] : ''
-  const insight = insIdx >= 0 ? text.slice(insIdx + SECTION_TAGS.insight.length).trim().split('\n')[0] : ''
+  const choiceB = bIdx >= 0 ? text.slice(bIdx + SECTION_TAGS.optionB.length, nextSection(insIdx, ledgerIdx)).trim().split('\n')[0] : ''
+  const insight = insIdx >= 0 ? text.slice(insIdx + SECTION_TAGS.insight.length, ledgerIdx >= 0 ? ledgerIdx : undefined).trim().split('\n')[0] : ''
+  const ledgerText = ledgerIdx >= 0 ? text.slice(ledgerIdx + SECTION_TAGS.ledger.length).trim().split('\n')[0] : ''
 
   return {
     paragraphs: story
@@ -96,7 +119,42 @@ export function parseSceneText(text: string): {
       .filter(Boolean),
     choices: choiceA && choiceB ? [choiceA, choiceB] : null,
     insight: insight || null,
+    ledger: parseLifeLedger(ledgerText),
   }
+}
+
+const LEDGER_ARRAY_KEYS = ['people', 'irreversibleFacts', 'objects', 'openThreads', 'recentConsequences', 'usedMotifs'] as const
+
+/** 把模型或请求中的未知数据收窄为可安全回传的事实账本。 */
+export function parseLifeLedger(value: unknown): LifeLedger | null {
+  let raw: unknown = value
+  if (typeof value === 'string') {
+    if (!value) return null
+    try {
+      raw = JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const record = raw as Record<string, unknown>
+  const text = (key: string) => typeof record[key] === 'string' ? record[key].trim().slice(0, 80) : ''
+  const list = (key: typeof LEDGER_ARRAY_KEYS[number]) => Array.isArray(record[key])
+    ? record[key].filter((item): item is string => typeof item === 'string').map((item) => item.trim().slice(0, 120)).filter(Boolean).slice(0, 12)
+    : []
+  const ledger: LifeLedger = {
+    currentAge: text('currentAge'),
+    currentTime: text('currentTime'),
+    location: text('location'),
+    occupation: text('occupation'),
+    people: list('people'),
+    irreversibleFacts: list('irreversibleFacts'),
+    objects: list('objects'),
+    openThreads: list('openThreads'),
+    recentConsequences: list('recentConsequences'),
+    usedMotifs: list('usedMotifs'),
+  }
+  return ledger.currentTime && ledger.location && ledger.occupation ? ledger : null
 }
 
 export const QUICK_TAGS = [

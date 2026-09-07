@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { containsSensitiveWord } from './_guard.js'
-import type { DecisionStep } from '../src/shared/protocol.js'
-import { formatStoryMemory, type StoryMemoryScene } from '../src/shared/protocol.js'
+import type { DecisionStep, LifeLedger } from '../src/shared/protocol.js'
+import { decisionText, formatStoryMemory, parseLifeLedger, type StoryMemoryScene } from '../src/shared/protocol.js'
 
 export const config = { api: { responseLimit: false } }
 
@@ -29,6 +29,8 @@ const SYSTEM_PROMPT = `你是平行人生档案馆的守馆人，擅长用第二
 
 const TOTAL_SCENES = 18
 
+const LEDGER_INSTRUCTION = `【人生档案】紧接一行合法 JSON，不用 Markdown 代码块。字段固定为：{"currentAge":"当前年龄","currentTime":"当前时间节点","location":"当前地点","occupation":"当前职业/身份","people":["人物：关系及当前状态"],"irreversibleFacts":["已经发生且不能悄悄撤销的事实"],"objects":["重要物件：当前状态及位置"],"openThreads":["尚未解决的线索"],"recentConsequences":["最近选择造成的结果"],"usedMotifs":["已经反复使用的意象"]}。必须基于正文更新，保留仍有效的旧事实；数组精简，每项不超过40字。`
+
 /** 人生阶段：给中间幕注入年龄段语境，让 18 幕读起来像完整一生而非重复日常 */
 function lifeStageOf(scene: number): string {
   const stages: Array<[number, string]> = [
@@ -55,36 +57,55 @@ const SCENE_FIRST = (assumption: string, profile: string) => `人生假设：${a
 
 这个平行人生将以「人生岔路口」的方式展开，一共 18 幕，从青年一路走到人生尽头：你会先写第一幕，结尾抛出两个都合理、但走向不同的选择，读者选一个，你再续写下一幕。请把 18 幕当成一段完整人生来规划——前期开岔、中期深化、后期回望，避免每幕都是相似的日常。
 
-现在写【第一幕】，按以下固定格式输出（三个标签必须齐全，顺序固定）：
+现在写【第一幕】，按以下固定格式输出（四个标签必须齐全，顺序固定）：
 【正文】100-150字，第二人称「你」叙述，具体生活细节，把读者带入这个假设人生刚刚展开的时刻（约二十岁上下），结尾留下一个自然的岔路口时刻
 【选项A】不超过12字，必须改变地点、职业、关系、责任或重要资源中的至少一项，并暗含一种获得和一种代价
 【选项B】不超过12字，与A改变同一层级的人生方向；禁止只更换、保留或丢弃无关物件
-除这三个标签和内容外不要输出任何其他内容。`
+${LEDGER_INSTRUCTION}
+除这四个标签和内容外不要输出任何其他内容。`
 
 /** 中间幕：续写 */
-const SCENE_MIDDLE = (n: number, prev: string, chosen: string) => `以下是这段人生最近发生的真实内容：
+const SCENE_MIDDLE = (n: number, assumption: string, prev: string, decisions: string, ledger: LifeLedger | null, chosen: string) => `最初的人生假设：${assumption}
+
+此前所有决定（必须全部承认，不得只记最后一次）：
+${decisions || '尚无'}
+
+上一幕确认的人生档案（这里的事实优先级最高）：
+${ledger ? JSON.stringify(ledger) : '暂无；请从已有正文建立'}
+
+以下是最近发生的真实内容：
 
 ${prev}
 
 读者选择了：【${chosen}】
 
-现在写【第${n}幕】，承接这个选择往下走，按以下固定格式输出（三个标签必须齐全，顺序固定）：
-【正文】100-150字，第二人称「你」叙述。开头第一句必须直接写出刚才这个选择造成的新动作或变化，并自然交代时间过去了多久；不得复制、改写或概括上一幕的开头，不得把上一幕整段重新讲一遍。随后承接上一幕最后的地点、人物或动作，进入选择带来的新境遇。优先从最近几幕回收一个已经出现过的物件、声音、气味、动作或一句话，让它在新选择后产生细微变化；不要每幕都新造抒情意象。结尾再次留下一个自然的岔路口
+现在写【第${n}幕】，承接这个选择往下走，按以下固定格式输出（四个标签必须齐全，顺序固定）：
+【正文】100-150字，第二人称「你」叙述。开头第一句必须直接写出刚才这个选择造成的新动作或变化，并自然交代时间过去了多久；不得复制、改写或概括上一幕的开头，不得把上一幕整段重新讲一遍。随后承接上一幕最后的地点、人物或动作，进入选择带来的新境遇。每幕必须推进或关闭至少一个 openThreads，不得只是换句话重复情绪。职业、人物身份、关系、地点若改变，正文必须明确写出原因和过程；irreversibleFacts 不得撤销；标记为丢弃、遗失、送出或死亡的人或物不得无解释复活。usedMotifs 中的同一意象不得连续使用超过两幕，优先发展事件而不是反复写咖啡、灯、雨、犹豫等氛围。
 【选项A】不超过12字，必须改变地点、职业、关系、责任或重要资源中的至少一项，并暗含一种获得和一种代价
 【选项B】不超过12字，与A改变同一层级的人生方向；禁止只更换、保留或丢弃无关物件，也禁止把「坚持」和「辞职旅行」当作万能选项
-除这三个标签和内容外不要输出任何其他内容。`
+${LEDGER_INSTRUCTION}
+除这四个标签和内容外不要输出任何其他内容。`
 
 /** 结局幕：收束 */
-const SCENE_FINAL = (prev: string, chosen: string) => `你之前写到：
+const SCENE_FINAL = (assumption: string, prev: string, decisions: string, ledger: LifeLedger | null, chosen: string) => `最初的人生假设：${assumption}
+
+此前所有决定：
+${decisions}
+
+上一幕确认的人生档案（不得违背）：
+${ledger ? JSON.stringify(ledger) : '暂无'}
+
+你之前写到：
 
 ${prev}
 
 读者选择了：【${chosen}】
 
-现在写【结局幕】，这是最后一段，按以下固定格式输出（两个标签必须齐全，顺序固定）：
+现在写【结局幕】，这是最后一段，按以下固定格式输出（三个标签必须齐全，顺序固定）：
 【正文】100-160字，第二人称「你」叙述，把这个选择走到的人生落到一个具体的日常画面上，不要完美也不要悲剧，最后落在一个具体的小动作或小愿望上
 【感悟】30-60字的一句话。必须同时做到：回应最初的人生假设；回收全文中真实出现过的一个物件、声音、气味、动作或一句话，并赋予它第二层含义；同时承认这条路带来的获得与失去；让仍然存在的遗憾落到主人公此后一个具体、微小的行动上。不要判定选择对错，不要宣布遗憾已经消失，不用成长或命运替伤害开脱。禁止「你终于明白」「人生就是」「原来我们都」「没关系」「也挺好」「就够了」「允许自己」等说理或万能安慰句；禁止凭空添加灯塔、星空、大海、月亮等漂亮意象。最后一句要像一段记忆自然合拢，不像作者总结
-除这两个标签和内容外不要输出任何其他内容。`
+${LEDGER_INSTRUCTION}
+除这三个标签和内容外不要输出任何其他内容。`
 
 // 简单内存级 IP 频控（单实例兜底；生产建议升级 Upstash 滑动窗口）
 const RATE_LIMIT_WINDOW_MS = 60_000
@@ -106,7 +127,7 @@ function isRateLimited(ip: string): boolean {
 
 /** 从请求体提取分幕参数（history 可选，缺省视为第一幕） */
 function validateSceneBody(body: unknown):
-  | { ok: true; value: { assumption: string; age: string; occupation: string; personality: string; scene: number; history: DecisionStep[]; context: StoryMemoryScene[] } }
+  | { ok: true; value: { assumption: string; age: string; occupation: string; personality: string; scene: number; history: DecisionStep[]; context: StoryMemoryScene[]; ledger: LifeLedger | null } }
   | { ok: false; error: string } {
   if (typeof body !== 'object' || body === null) return { ok: false, error: '请求体格式错误' }
   const b = body as Record<string, unknown>
@@ -159,6 +180,7 @@ function validateSceneBody(body: unknown):
       scene: sceneRaw,
       history,
       context,
+      ledger: parseLifeLedger(b.ledger),
     },
   }
 }
@@ -193,9 +215,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(400).json({ error: parsed.error })
     return
   }
-  const { assumption, age, occupation, personality, scene, history, context } = parsed.value
+  const { assumption, age, occupation, personality, scene, history, context, ledger } = parsed.value
 
-  if (containsSensitiveWord(assumption) || containsSensitiveWord(occupation + personality) || history.some((step) => containsSensitiveWord(step.decision ?? '')) || context.some((item) => containsSensitiveWord(item.text + (item.decision ?? '')))) {
+  if (containsSensitiveWord(assumption) || containsSensitiveWord(occupation + personality) || history.some((step) => containsSensitiveWord(step.decision ?? '')) || context.some((item) => containsSensitiveWord(item.text + (item.decision ?? ''))) || (ledger && containsSensitiveWord(JSON.stringify(ledger)))) {
     res.status(422).json({ error: '这个假设超出了档案馆的收录范围，换一个试试吧' })
     return
   }
@@ -206,20 +228,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  // 组装该幕的 user prompt（history 只回传最近一幕的选择即可，prompt 保持精简）
+  // 长篇续写同时携带完整决定链、最近原文和结构化事实账本。
   const profile = profileOf(age, occupation, personality)
   const lastChoice = history.length ? history[history.length - 1] : null
+  const decisionTrail = history.map((step) => `第${step.scene}幕：${decisionText(step)}`).join('\n')
   let userContent: string
   if (scene === 1) {
     userContent = SCENE_FIRST(assumption, profile)
   } else if (scene < TOTAL_SCENES) {
     const chosen = lastChoice?.decision || (lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向')
-    const prevSummary = formatStoryMemory(context) || `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者决定：「${chosen}」`
-    userContent = SCENE_MIDDLE(scene, prevSummary, chosen) + lifeStageOf(scene)
+    const prevSummary = formatStoryMemory(context.slice(-2)) || `「${assumption}」的平行人生，第 ${scene - 1} 幕结束时读者决定：「${chosen}」`
+    userContent = SCENE_MIDDLE(scene, assumption, prevSummary, decisionTrail, ledger, chosen) + lifeStageOf(scene)
   } else {
-    const decisionTrail = history.map((item) => item.decision).filter(Boolean).slice(-8).join(' → ')
-    const prevSummary = `${formatStoryMemory(context)}\n\n此前关键决定：${decisionTrail}`
-    userContent = SCENE_FINAL(prevSummary, lastChoice?.decision || (lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向'))
+    const prevSummary = formatStoryMemory(context.slice(-2))
+    userContent = SCENE_FINAL(assumption, prevSummary, decisionTrail, ledger, lastChoice?.decision || (lastChoice?.choice === 0 ? '选项A的方向' : '选项B的方向'))
   }
 
   try {
@@ -237,7 +259,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ],
         temperature: 0.9,
         top_p: 0.95,
-        max_tokens: 900,
+        max_tokens: 1200,
         stream: true,
         enable_thinking: false,
       }),

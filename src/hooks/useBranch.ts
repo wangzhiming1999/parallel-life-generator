@@ -149,6 +149,7 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
               text: scene.paragraphs.join('\n').slice(0, 500),
               decision: history.find((step) => step.scene === scene.scene)?.decision,
             })),
+            ledger: ctx.scenes.at(-1)?.ledger ?? undefined,
           }),
           signal: controller.signal,
         })
@@ -218,13 +219,13 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
 
         // 非结局幕必须有选项。流提前中断（正文有了但【选项A/B】没出来）时不归档，
         // 自动重试一次：对用户表现为「岔路口晚几秒亮起」，而不是死寂兜底页
-        const incomplete = targetScene < TOTAL_SCENES && !acc.choices
+        const incomplete = (targetScene < TOTAL_SCENES && !acc.choices) || !acc.ledger
         if (incomplete && !autoRetryUsed) {
           void selfRef.current?.(targetScene, history, true)
           return
         }
         if (incomplete) {
-          setError('岔路口没亮起来，请重试这一幕')
+          setError('这一幕的人生线索没有写完整，请重试')
           setPhase('idle')
           return
         }
@@ -259,6 +260,7 @@ export function useBranch({ onSceneDone, onRunDone, onSnapshot }: UseBranchOptio
           paragraphs: acc.paragraphs,
           choices: targetScene < TOTAL_SCENES ? acc.choices : null,
           insight: targetScene === TOTAL_SCENES ? acc.insight : null,
+          ledger: acc.ledger,
         }
 
         // 归档该幕

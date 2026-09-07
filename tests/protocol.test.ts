@@ -27,6 +27,40 @@ describe('parseSceneText 真实 Qwen 输出格式', () => {
     const r = parseSceneText(dirty)
     console.log('脏数据 choices:', JSON.stringify(r.choices))
   })
+
+  it('解析隐藏的人生档案，且不会把档案混进选项', () => {
+    const output = [
+      '【正文】',
+      '你把记者证收进抽屉，决定去新城市继续调查。',
+      '【选项A】',
+      '接受报社驻外岗位',
+      '【选项B】',
+      '留在本地完成手上的报道',
+      '【人生档案】',
+      JSON.stringify({
+        currentAge: '26岁',
+        currentTime: '毕业后第四年',
+        location: '北京',
+        occupation: '记者',
+        people: ['母亲：在老家，关系牵挂'],
+        irreversibleFacts: ['大学毕业后没有回老家'],
+        objects: ['记者证：收在书桌抽屉里'],
+        openThreads: ['是否接受驻外岗位'],
+        recentConsequences: ['错过了母亲的电话'],
+        usedMotifs: ['未接来电'],
+      }),
+    ].join('\n')
+
+    const parsed = parseSceneText(output)
+    expect(parsed.choices?.[1]).toBe('留在本地完成手上的报道')
+    expect(parsed.ledger?.occupation).toBe('记者')
+    expect(parsed.ledger?.objects).toEqual(['记者证：收在书桌抽屉里'])
+  })
+
+  it('人生档案不是合法 JSON 时不接受', () => {
+    const parsed = parseSceneText('【正文】故事。\n【人生档案】\n职业：记者')
+    expect(parsed.ledger).toBeNull()
+  })
 })
 
 describe('decisionText', () => {
