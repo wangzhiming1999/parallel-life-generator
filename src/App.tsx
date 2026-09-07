@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBranch } from './hooks/useBranch'
-import { ambientSceneForLife, useAmbientMusic, AmbientMusicButton, type AmbientScene } from './hooks/useAmbientMusic'
+import { useAmbientMusic, AmbientMusicButton } from './hooks/useAmbientMusic'
 import ParticleBackground from './components/ParticleBackground'
 import MarqueeText from './components/MarqueeText'
 import { ASSUMPTION_MAX_LEN, isVagueInsight, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
@@ -73,10 +73,10 @@ export default function App() {
     if (branch.phase === 'idle' && branch.error) setView('input')
   }, [branch.phase, branch.error])
 
-  // 背景音乐跟随场景
+  // 全程共用同一音源；终章只做轻微音量变化，不重新加载音乐。
   useEffect(() => {
     const isFinal = branch.scene === TOTAL_SCENES && branch.phase === 'done' && branch.insight
-    const scene: AmbientScene = view === 'input' ? 'input' : view === 'ocean' ? 'reflection' : ambientSceneForLife(branch.scene, Boolean(isFinal))
+    const scene: 'input' | 'journey' | 'result' = view === 'input' ? 'input' : isFinal ? 'result' : 'journey'
     music.setScene(scene)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, branch.phase, branch.scene, branch.insight])
@@ -188,12 +188,14 @@ export default function App() {
     try {
       const response = await fetch('/api/archives')
       const payload = await response.json() as ArchiveResponse & { error?: { message?: string } }
-      if (!response.ok) throw new Error(payload.error?.message || '没有捞到档案')
+      if (!response.ok) throw new Error(payload.error?.message || '暂时没有捞到档案')
       setCaughtArchive(payload.data)
       setOceanMessage('')
     } catch (error) {
+      // 捞不到就直接回主界面提示，不留在空荡的档案海页面
       setCaughtArchive(null)
-      setOceanMessage(error instanceof Error ? error.message : '暂时没有捞到档案')
+      setView('input')
+      showToast(error instanceof Error ? error.message : '暂时没有捞到档案，稍后再试试')
     } finally {
       setArchiveBusy(false)
     }

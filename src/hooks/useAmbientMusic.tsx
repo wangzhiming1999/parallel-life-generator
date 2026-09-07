@@ -1,38 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type AmbientScene = 'input' | 'opening' | 'departure' | 'crossroads' | 'settling' | 'reflection' | 'result'
+export type AmbientScene = 'input' | 'journey' | 'result'
 
 /**
- * 场景曲库：全部 Pixabay License（免费商用、免署名）。
- * CDN 直链已验证可跨域（Access-Control-Allow-Origin: *），支持循环与淡入淡出。
+ * 渐进式背景乐（v2）：
+ * 全程只播一首主干曲（《Ambient Piano》），不在生成状态或幕次变化时替换音源。
+ * 结局只轻微调整音量，避免远程音频重新加载造成停顿。
+ * 曲目均 Pixabay License（免费商用、免署名），CDN 支持跨域与 Range。
  */
-const TRACKS: Record<AmbientScene, { src: string; name: string }[]> = {
-  input: [{ src: 'https://cdn.pixabay.com/audio/2022/05/05/audio_1395e7800f.mp3', name: 'Forest Lullaby' }],
-  opening: [{ src: 'https://cdn.pixabay.com/audio/2022/07/04/audio_477fb4c391.mp3', name: 'Sunrise' }],
-  departure: [{ src: 'https://cdn.pixabay.com/audio/2022/01/11/audio_b21d9d6fa6.mp3', name: 'Moment' }],
-  crossroads: [{ src: 'https://cdn.pixabay.com/audio/2022/08/02/audio_884fe92c21.mp3', name: 'Inspiring Cinematic Ambient' }],
-  settling: [{ src: 'https://cdn.pixabay.com/audio/2022/11/23/audio_af8f60c3a6.mp3', name: 'Deep in the Dell' }],
-  reflection: [{ src: 'https://cdn.pixabay.com/audio/2022/11/11/audio_84306ee149.mp3', name: 'Please Calm My Mind' }],
-  result: [{ src: 'https://cdn.pixabay.com/audio/2021/11/13/audio_cb4f1212a9.mp3', name: 'Ambient Piano' }],
+const JOURNEY_TRACK = { src: 'https://cdn.pixabay.com/audio/2021/11/13/audio_cb4f1212a9.mp3', name: 'Ambient Piano' }
+
+export function trackForAmbientScene(_scene: AmbientScene): string {
+  return JOURNEY_TRACK.src
 }
 
-export function ambientSceneForLife(scene: number, isFinal = false): AmbientScene {
+export function ambientSceneForLife(_scene: number, isFinal = false): AmbientScene {
   if (isFinal) return 'result'
-  if (scene <= 3) return 'opening'
-  if (scene <= 6) return 'departure'
-  if (scene <= 10) return 'crossroads'
-  if (scene <= 14) return 'settling'
-  return 'reflection'
+  return 'journey'
 }
 
-// 统一音量（背景乐不宜喧宾夺主）
-const TARGET_VOLUME = 0.35
-const FADE_MS = 1200
+// 阅读过程中保持稳定音量；每幕重新渐变会被听成忽大忽小或断续。
+const JOURNEY_VOLUME = 0.28
+const FINAL_VOLUME = 0.3
+const FADE_MS = 2500 // 拉长淡入淡出：渐进感的另一半来自慢过渡
+
+export function journeyVolumeForScene(_scene: number): number {
+  return JOURNEY_VOLUME
+}
 
 /**
- * 场景化歌曲背景乐：每个场景一首循环曲目，切换时交叉淡入淡出。
+ * 渐进式背景乐 hook：
  * - 默认关闭（浏览器自动播放策略要求用户手势后才能出声）
- * - 单 <audio> 复用，切换 = 淡出旧曲 → 换 src → 淡入新曲
+ * - 单 <audio> 复用；主干曲全程不换 src，只做音量渐变
  * - iOS Safari / 微信内核兼容：用 audio.play() Promise 捕获中断异常
  */
 export function useAmbientMusic() {
@@ -40,6 +39,8 @@ export function useAmbientMusic() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const sceneRef = useRef<AmbientScene>('input')
   const fadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // 记录当前生效的 src（el.src 会变成 blob 绝对地址，用 includes 判断不可靠）
+  const currentSrcRef = useRef<string>('')
 
   const getAudio = useCallback((): HTMLAudioElement => {
     if (!audioRef.current) {
@@ -52,46 +53,48 @@ export function useAmbientMusic() {
     return audioRef.current
   }, [])
 
-  /** 音量渐变到目标值 */
+  /** 音量渐变到目标值（线性插值，慢过渡） */
   const fadeTo = useCallback((target: number, onDone?: () => void) => {
     const el = getAudio()
     if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
-    const step = 0.04 * (target > el.volume ? 1 : -1)
+    const stepInterval = 50
+    const delta = (target - el.volume) / (FADE_MS / stepInterval)
     fadeTimerRef.current = setInterval(() => {
-      const next = el.volume + step
-      const reached = step > 0 ? next >= target : next <= target
+      const next = el.volume + delta
+      const reached = delta >= 0 ? next >= target : next <= target
       el.volume = Math.max(0, Math.min(target, reached ? target : next))
       if (reached) {
         if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
         fadeTimerRef.current = null
         onDone?.()
       }
-    }, FADE_MS / (TARGET_VOLUME / 0.04))
+    }, stepInterval)
   }, [getAudio])
 
-  /** 播放指定场景曲目（已开启时） */
+  /** 播放指定场景（已开启时）。所有场景共用同一音源，只调整音量。 */
   const playScene = useCallback(
     (scene: AmbientScene) => {
       const el = getAudio()
-      const track = TRACKS[scene][0]
-      const absoluteSrc = !el.src || !el.src.includes(track.src.split('/').pop() ?? '')
-      if (absoluteSrc) {
-        // 淡出 → 换曲 → 淡入
-        fadeTo(0, () => {
-          el.src = track.src
-          el.volume = 0
-          el.play().catch(() => {
-            /* 用户手势前播放被拦截，静默失败 */
-          })
-          fadeTo(TARGET_VOLUME)
-        })
+      const targetSrc = trackForAmbientScene(scene)
+      if (currentSrcRef.current === targetSrc) {
+        fadeTo(scene === 'result' ? FINAL_VOLUME : JOURNEY_VOLUME)
+        return
       }
+      currentSrcRef.current = targetSrc
+      el.src = targetSrc
+      el.volume = 0
+      el.play().then(() => {
+        fadeTo(scene === 'result' ? FINAL_VOLUME : JOURNEY_VOLUME)
+      }).catch(() => {
+        /* 用户手势前播放被拦截，静默失败 */
+      })
     },
     [fadeTo, getAudio],
   )
 
   const setScene = useCallback(
     (scene: AmbientScene) => {
+      if (sceneRef.current === scene) return
       sceneRef.current = scene
       if (enabled) playScene(scene)
     },
@@ -107,10 +110,12 @@ export function useAmbientMusic() {
       setEnabled(false)
     } else {
       // 用户手势内：直接播当前场景曲目并淡入
-      el.src = TRACKS[sceneRef.current][0].src
+      const targetSrc = trackForAmbientScene(sceneRef.current)
+      currentSrcRef.current = targetSrc
+      el.src = targetSrc
       el.volume = 0
       el.play()
-        .then(() => fadeTo(TARGET_VOLUME))
+        .then(() => fadeTo(sceneRef.current === 'result' ? FINAL_VOLUME : journeyVolumeForScene(1)))
         .catch(() => {
           /* 极旧内核不支持，静默失败 */
         })
@@ -121,12 +126,13 @@ export function useAmbientMusic() {
   /** 必须直接从点击事件调用，借用户手势通过浏览器的自动播放限制。 */
   const start = useCallback(() => {
     const el = getAudio()
-    sceneRef.current = 'opening'
-    el.src = TRACKS.opening[0].src
+    sceneRef.current = 'journey'
+    currentSrcRef.current = JOURNEY_TRACK.src
+    el.src = JOURNEY_TRACK.src
     el.volume = 0
     setEnabled(true)
     void el.play()
-      .then(() => fadeTo(TARGET_VOLUME))
+      .then(() => fadeTo(journeyVolumeForScene(1)))
       .catch(() => setEnabled(false))
   }, [fadeTo, getAudio])
 

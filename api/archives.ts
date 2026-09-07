@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import postgres from 'postgres'
 import { containsSensitiveWord } from './_guard.js'
+import { isVagueInsight } from '../src/shared/protocol.js'
 import type { ArchivePublishInput, PublicArchive } from '../src/shared/archive.js'
 
 const ALLOWED_ORIGINS = [
@@ -54,6 +55,8 @@ export function validateArchive(body: unknown): ArchivePublishInput | null {
 
   const allText = [assumption, insight, ...scenes.flatMap((scene) => scene?.paragraphs ?? []), ...path.map((step) => step?.decision ?? '')].join('\n')
   if (containsSensitiveWord(allText)) return null
+  // 空洞结局不进档案海：打捞的人读到的应是能回应这段人生的感悟
+  if (isVagueInsight(insight)) return null
   return { assumption, universeTitle, insight, scenes: scenes as ArchivePublishInput['scenes'], path: path as ArchivePublishInput['path'] }
 }
 
