@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { animate, type JSAnimation } from 'animejs'
 
 export type AmbientScene = 'input' | 'journey' | 'result'
 
@@ -38,7 +39,7 @@ export function useAmbientMusic() {
   const [enabled, setEnabled] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const sceneRef = useRef<AmbientScene>('input')
-  const fadeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const fadeRef = useRef<JSAnimation | null>(null)
   // 记录当前生效的 src（el.src 会变成 blob 绝对地址，用 includes 判断不可靠）
   const currentSrcRef = useRef<string>('')
 
@@ -53,22 +54,29 @@ export function useAmbientMusic() {
     return audioRef.current
   }, [])
 
-  /** 音量渐变到目标值（线性插值，慢过渡） */
+  /**
+   * 音量渐变到目标值。
+   *
+   * 以前是 setInterval 每 50ms 线性加一个固定步长，现在是 anime.js 补间一个
+   * 普通对象再把值写回 audio.volume：缓入缓出比线性更接近「逐渐听见」的听感，
+   * 结束时会精确落在目标值上，不会因步长取整留下偏差。
+   */
   const fadeTo = useCallback((target: number, onDone?: () => void) => {
     const el = getAudio()
-    if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
-    const stepInterval = 50
-    const delta = (target - el.volume) / (FADE_MS / stepInterval)
-    fadeTimerRef.current = setInterval(() => {
-      const next = el.volume + delta
-      const reached = delta >= 0 ? next >= target : next <= target
-      el.volume = Math.max(0, Math.min(target, reached ? target : next))
-      if (reached) {
-        if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
-        fadeTimerRef.current = null
+    fadeRef.current?.cancel()
+    const state = { volume: el.volume }
+    fadeRef.current = animate(state, {
+      volume: target,
+      duration: FADE_MS,
+      ease: 'inOutQuad',
+      onUpdate: () => {
+        el.volume = Math.max(0, Math.min(1, state.volume))
+      },
+      onComplete: () => {
+        el.volume = target
         onDone?.()
-      }
-    }, stepInterval)
+      },
+    })
   }, [getAudio])
 
   /** 播放指定场景（已开启时）。所有场景共用同一音源，只调整音量。 */
@@ -138,7 +146,7 @@ export function useAmbientMusic() {
 
   useEffect(
     () => () => {
-      if (fadeTimerRef.current) clearInterval(fadeTimerRef.current)
+      fadeRef.current?.cancel()
       audioRef.current?.pause()
       audioRef.current = null
     },

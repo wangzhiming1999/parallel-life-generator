@@ -1,11 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { stagger } from 'animejs'
 import { useBranch } from './hooks/useBranch'
 import { useAmbientMusic, AmbientMusicButton } from './hooks/useAmbientMusic'
+import { useAnime, useAnimeChildren } from './hooks/useMotion'
 import ParticleBackground from './components/ParticleBackground'
 import MarqueeText from './components/MarqueeText'
+import BreathingDots from './components/BreathingDots'
+import ChoiceZone from './components/ChoiceZone'
+import DestinationDialog from './components/DestinationDialog'
+import InsightCard from './components/InsightCard'
+import LifeEntry from './components/LifeEntry'
+import PulseGrid from './components/PulseGrid'
+import SceneProgress from './components/SceneProgress'
+import TimelineMap from './components/TimelineMap'
+import Toast from './components/Toast'
 import { ASSUMPTION_MAX_LEN, isVagueInsight, QUICK_TAGS, TOTAL_SCENES, type BranchRunState } from './shared/protocol'
 import { copyText, loadBranchRun, saveBranchRun, clearBranchRun } from './lib/storage'
 import { getLifeStage, getUniversePulse, pathDistance, type LifeDimension } from './lib/universe'
+import { DURATION, EASE } from './lib/motion'
 import type { ArchiveResponse, PublicArchive } from './shared/archive'
 
 type View = 'input' | 'loading' | 'story' | 'ocean'
@@ -26,17 +38,52 @@ export default function App() {
   const [resumed, setResumed] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
   const [previousUniverse, setPreviousUniverse] = useState<BranchRunState | null>(null)
-  const [customDecisionOpen, setCustomDecisionOpen] = useState(false)
-  const [customDecision, setCustomDecision] = useState('')
   const [archiveChoiceOpen, setArchiveChoiceOpen] = useState(false)
   const [archiveBusy, setArchiveBusy] = useState(false)
   const [caughtArchive, setCaughtArchive] = useState<PublicArchive | null>(null)
   const [oceanMessage, setOceanMessage] = useState('')
   const [publishedArchiveCode, setPublishedArchiveCode] = useState('')
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const storyEndRef = useRef<HTMLDivElement | null>(null)
 
   const music = useAmbientMusic()
+
+  /**
+   * 视图级入场：输入页各区块自上而下依次浮现，故事页是控制台先落位，
+   * 档案海整块柔入。放在 main 上一个 hook 里按当前视图切选择器，
+   * 避免给每个视图各挂一套 ref。子视图里的细节动画由各自的组件负责。
+   */
+  const revealSelector = view === 'input'
+    ? '.memory-world--input main > *'
+    : view === 'story'
+      ? '.universe-console'
+      : '.ocean-view > *'
+  const mainRef = useAnimeChildren<HTMLElement>(
+    revealSelector,
+    { opacity: [0, 1], y: [10, 0], duration: DURATION.enter, delay: stagger(60), ease: EASE.outSoft },
+    [view],
+  )
+
+  /** 幕间淡出/淡入：原先是内联 CSS transition，改由 anime.js 统一驱动 */
+  const articleRef = useAnime<HTMLElement>(
+    { opacity: transitioning ? 0 : 1, duration: DURATION.cross, ease: EASE.cross },
+    [transitioning],
+  )
+
+  /**
+   * 输入页主标题：字距由松到紧收拢、散焦到清晰，像从记忆里慢慢浮上来。
+   * 这套手感原先只剩一份没用上的 CSS keyframes，换成 anime.js 后真正跑起来。
+   * 不额外动 opacity —— 标题的淡入交给上面的视图级揭示，避免两层透明度叠加。
+   */
+  const titleRef = useAnimeChildren<HTMLElement>(
+    'h1',
+    {
+      letterSpacing: ['0.3em', '0.04em'],
+      filter: ['blur(4px)', 'blur(0px)'],
+      duration: DURATION.title,
+      ease: EASE.outSoft,
+    },
+    [view],
+  )
 
   const handleRunDone = useCallback((state: BranchRunState) => {
     saveBranchRun(state)
@@ -90,12 +137,11 @@ export default function App() {
   const handleChoose = (choice: 0 | 1, decision?: string) => {
     if (branch.phase !== 'done' || transitioning || branch.scene >= TOTAL_SCENES) return
     setTransitioning(true)
+    // 等淡出播完再换幕：时长与 DURATION.cross 对齐，留 40ms 余量避免边界抖动
     setTimeout(() => {
       branch.choose(choice, decision)
       setTransitioning(false)
-      setCustomDecision('')
-      setCustomDecisionOpen(false)
-    }, 600)
+    }, DURATION.cross + 40)
   }
 
   const handleFork = (scene: number, originalChoice: 0 | 1) => {
@@ -111,8 +157,6 @@ export default function App() {
     }
     setPreviousUniverse(currentState)
     setMapOpen(false)
-    setCustomDecision('')
-    setCustomDecisionOpen(false)
     setPublishedArchiveCode('')
     setResumed(false)
     branch.fork(scene, originalChoice === 0 ? 1 : 0)
@@ -222,7 +266,7 @@ export default function App() {
   return (
     <div className={`memory-world memory-world--${view} min-h-dvh flex flex-col relative`}>
       <ParticleBackground />
-      <main className="flex-1 w-full max-w-[640px] mx-auto px-5 py-10 relative" style={{ zIndex: 1 }}>
+      <main ref={mainRef} className="flex-1 w-full max-w-[640px] mx-auto px-5 py-10 relative" style={{ zIndex: 1 }}>
         {view === 'input' && (
           <>
             {savedRun && (
@@ -244,7 +288,7 @@ export default function App() {
                 </button>
               </section>
             )}
-            <header className="text-center mb-10">
+            <header ref={titleRef} className="text-center mb-10">
               <p className="archive-eyebrow">MEMORY ARCHIVE · 1999—∞</p>
               <h1 className="text-[26px] font-medium m-0" style={{ color: 'var(--color-ink)', lineHeight: 1.4 }}>
                 平行人生档案馆
@@ -346,12 +390,7 @@ export default function App() {
         )}
 
         {view === 'story' && (
-          <article
-            style={{
-              opacity: transitioning ? 0 : 1,
-              transition: 'opacity 0.55s ease',
-            }}
-          >
+          <article ref={articleRef}>
             <header className="universe-console mb-8" aria-label="当前平行宇宙状态">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -363,63 +402,28 @@ export default function App() {
                   {mapOpen ? '收起星图' : '打开星图'}
                 </button>
               </div>
-              <div className="pulse-grid">
-                {dimensions.map(([label, value]) => (
-                  <div key={label} className="pulse-item">
-                    <span>{label}</span><strong>{value}</strong>
-                    <i><b style={{ width: `${value}%` }} /></i>
-                  </div>
-                ))}
-              </div>
+              <PulseGrid dimensions={dimensions} />
               {pulse.fragments.length > 0 && (
                 <p className="fragment-line">已拾取 {pulse.fragments.length}/6 枚时间碎片 · {pulse.fragments.at(-1)}</p>
               )}
             </header>
 
             {mapOpen && (
-              <section className="timeline-map mb-8" aria-label="世界线星图">
-                <div className="timeline-heading">
-                  <div><strong>你的世界线</strong><span>点击已走过的节点，改选一次</span></div>
-                  <span>{Math.max(1, 2 ** Math.min(branch.path.length, 17)).toLocaleString()} 种可能</span>
-                </div>
-                <div className="timeline-nodes">
-                  {branch.path.map((step) => {
-                    const scene = branch.scenes.find((item) => item.scene === step.scene)
-                    return (
-                      <button key={step.scene} onClick={() => handleFork(step.scene, step.choice)} title="从这里进入另一条世界线">
-                        <span>{step.scene}</span>
-                        <small>{step.decision ?? scene?.choices?.[step.choice] ?? (step.choice === 0 ? '选择 A' : '选择 B')}</small>
-                        <em>改选</em>
-                      </button>
-                    )
-                  })}
-                  {branch.path.length === 0 && <p>做出第一个选择后，世界线会从这里生长。</p>}
-                </div>
-              </section>
+              <TimelineMap path={branch.path} scenes={branch.scenes} onFork={handleFork} />
             )}
 
             {/* 走过的幕（紧凑回显） */}
             {doneScenes.map((s) => {
               const step = branch.path.find((item) => item.scene === s.scene)
               const decision = step?.decision ?? (step ? s.choices?.[step.choice] : undefined)
-              return <div key={s.scene} className="life-entry">
-                <section className="mb-6 done-scene">
-                  <p className="text-[11px] tracking-widest mb-1.5" style={{ color: 'var(--color-ink-secondary)', opacity: 0.6 }}>
-                    人生片段 {String(s.scene).padStart(2, '0')} · {getLifeStage(s.scene)}
-                  </p>
-                  {s.paragraphs.map((p, i) => (
-                    <p key={i} className="para m-0 text-[14.5px] leading-[1.75]" style={{ color: 'var(--color-ink-secondary)' }}>
-                      {p}
-                    </p>
-                  ))}
-                </section>
-                {decision && (
-                  <div className="decision-bridge">
-                    <span>你的决定</span>
-                    <strong>{decision}</strong>
-                  </div>
-                )}
-              </div>
+              return (
+                <LifeEntry
+                  key={s.scene}
+                  scene={s.scene}
+                  paragraphs={s.paragraphs}
+                  decision={decision}
+                />
+              )
             })}
 
             {/* 当前幕（走马灯逐字点亮） */}
@@ -428,70 +432,18 @@ export default function App() {
                 {branch.scene === TOTAL_SCENES ? '人生终章' : `人生片段 ${String(branch.scene).padStart(2, '0')} · ${getLifeStage(branch.scene)}`}
               </p>
               {branch.paragraphs.map((p, i) => (
-                <p key={`${branch.scene}-${i}`} className="para m-0 text-[16px]" style={{ color: 'var(--color-ink)' }}>
+                <p key={`${branch.scene}-${i}`} className="m-0 text-[16px]" style={{ color: 'var(--color-ink)' }}>
                   <MarqueeText text={p} active={branch.phase === 'streaming'} />
                 </p>
               ))}
               {branch.insight && (
-                <section className={`insight-card mt-8 ${branch.phase === 'done' ? 'insight-glow' : 'insight-card-streaming'}`}>
-                  <span className="insight-mark">✶</span>
-                  <p className="insight-text">
-                    <MarqueeText text={branch.insight} charInterval={60} active={branch.phase === 'streaming'} />
-                  </p>
-                </section>
+                <InsightCard text={branch.insight} streaming={branch.phase === 'streaming'} />
               )}
             </section>
 
             {/* 幕尾交互区 */}
             {branch.phase === 'done' && branch.choices && !isFinalDone && (
-              <div className="choice-zone">
-                <p className="text-center text-[13px] mb-4" style={{ color: 'var(--color-ink-secondary)' }}>
-                  {resumed ? '从这里继续，你的选择是——' : '岔路口到了，你的选择是——'}
-                </p>
-                <div className="flex flex-col gap-3 mb-10">
-                  {branch.choices.map((c, i) => (
-                    <button
-                      key={i}
-                      onClick={() => handleChoose(i as 0 | 1)}
-                      className="choice-btn"
-                    >
-                      <span className="choice-mark">{'①②'[i]}</span>
-                      {c}
-                    </button>
-                  ))}
-                  {!customDecisionOpen ? (
-                    <button onClick={() => setCustomDecisionOpen(true)} className="custom-decision-trigger">
-                      <span>＋</span>
-                      这两个都不是，我自己决定
-                    </button>
-                  ) : (
-                    <form
-                      className="custom-decision-form"
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        const decision = customDecision.trim()
-                        if (decision.length >= 2) handleChoose(0, decision)
-                      }}
-                    >
-                      <label htmlFor="custom-decision">此刻，你真正想怎么做？</label>
-                      <textarea
-                        id="custom-decision"
-                        autoFocus
-                        value={customDecision}
-                        onChange={(event) => setCustomDecision(event.target.value.slice(0, 120))}
-                        placeholder="例如：我不辞职，也不留下。我申请三个月假期，先去看看外面的世界。"
-                        rows={3}
-                        maxLength={120}
-                      />
-                      <div>
-                        <span>{customDecision.length}/120</span>
-                        <button type="button" onClick={() => setCustomDecisionOpen(false)}>取消</button>
-                        <button type="submit" disabled={customDecision.trim().length < 2}>就这样决定</button>
-                      </div>
-                    </form>
-                  )}
-                </div>
-              </div>
+              <ChoiceZone choices={branch.choices} resumed={resumed} onChoose={handleChoose} />
             )}
 
             {/* 死寂兜底：done 但既无选项也无结局（异常态），给重试出路 */}
@@ -512,15 +464,7 @@ export default function App() {
 
             {branch.phase !== 'done' && (
               <div className="flex items-center justify-center gap-2.5 h-[48px] mb-12" aria-live="polite">
-                <span className="inline-flex gap-1.5">
-                  {[0, 1, 2].map((i) => (
-                    <span
-                      key={i}
-                      className="breathing inline-block w-1.5 h-1.5 rounded-full"
-                      style={{ background: 'var(--color-primary-strong)', animationDelay: `${i * 0.25}s` }}
-                    />
-                  ))}
-                </span>
+                <BreathingDots />
                 <span className="text-[14px]" style={{ color: 'var(--color-ink-secondary)' }}>
                   {branch.phase === 'loading' ? '正在翻开下一页…' : '正在书写这段人生…'}
                 </span>
@@ -576,29 +520,8 @@ export default function App() {
               </div>
             )}
 
-            {/* 幕进度指示：18 幕改为当前幕为中心的局部窗口，避免整条塞满屏幕 */}
-            <div className="flex justify-center items-center gap-1 mb-4 overflow-hidden" style={{ maxWidth: 180, margin: '0 auto 16px' }}>
-              {Array.from({ length: TOTAL_SCENES }, (_, i) => {
-                const n = i + 1
-                const distance = Math.abs(n - branch.scene)
-                if (distance > 4) return null // 窗口外的不渲染，只显示前后各 4 幕
-                const isCurrent = n === branch.scene
-                const isPast = n < branch.scene
-                return (
-                  <span
-                    key={n}
-                    className="inline-block rounded-full transition-all duration-500"
-                    style={{
-                      width: isCurrent ? 16 : distance <= 2 ? 5 : 3,
-                      height: isCurrent ? 4 : 3,
-                      background: isPast || isCurrent ? 'var(--color-primary-strong)' : 'var(--color-line)',
-                      opacity: isCurrent ? 1 : distance <= 2 ? 0.85 : 0.4,
-                    }}
-                  />
-                )
-              })}
-            </div>
-            <div ref={storyEndRef} aria-hidden="true" className="h-px" />
+            {/* 幕进度指示：18 幕只渲染当前幕前后各 4 幕，避免整条塞满屏幕 */}
+            <SceneProgress total={TOTAL_SCENES} scene={branch.scene} />
           </article>
         )}
 
@@ -639,34 +562,18 @@ export default function App() {
         </p>
       </footer>
 
-      {toast && (
-        <div
-          className="fixed left-1/2 bottom-16 -translate-x-1/2 px-4 py-2 rounded-full text-[14px]"
-          style={{ background: 'var(--color-card)', color: 'var(--color-ink)', border: '0.5px solid var(--color-line)', zIndex: 20 }}
-        >
-          {toast}
-        </div>
-      )}
+      {toast && <Toast message={toast} />}
 
       <AmbientMusicButton enabled={music.enabled} onToggle={music.toggle} />
 
       {archiveChoiceOpen && (
-        <div className="destination-backdrop" role="presentation" onMouseDown={() => setArchiveChoiceOpen(false)}>
-          <section className="destination-dialog" role="dialog" aria-modal="true" aria-labelledby="destination-title" onMouseDown={(event) => event.stopPropagation()}>
-            <button className="destination-close" onClick={() => setArchiveChoiceOpen(false)} aria-label="关闭">×</button>
-            <p>旅程结束了</p>
-            <h2 id="destination-title">这份人生，要去哪里？</h2>
-            <div className="destination-options">
-              <button onClick={handleThrowToSea} disabled={archiveBusy}>
-                <span>≈</span><strong>丢入大海</strong><small>匿名公开保存，可能被陌生人打捞阅读</small>
-              </button>
-              <button onClick={handleLaunchToGalaxy} disabled={archiveBusy}>
-                <span>✦</span><strong>发射到银河</strong><small>不上传、不保存，离开后无法找回</small>
-              </button>
-            </div>
-            {oceanMessage && <p className="destination-message" aria-live="polite">{oceanMessage}</p>}
-          </section>
-        </div>
+        <DestinationDialog
+          busy={archiveBusy}
+          message={oceanMessage}
+          onClose={() => setArchiveChoiceOpen(false)}
+          onThrowToSea={handleThrowToSea}
+          onLaunchToGalaxy={handleLaunchToGalaxy}
+        />
       )}
     </div>
   )

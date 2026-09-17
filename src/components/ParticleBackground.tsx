@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createTimer, type Timer } from 'animejs'
 
 interface Particle {
   x: number
@@ -16,6 +17,9 @@ interface Particle {
  * - 暖金色粒子缓慢上浮 + 呼吸闪烁，暗色模式下更明显
  * - 鼠标/触摸移动产生轻微气流扰动
  * - prefers-reduced-motion 时仅静态渲染一帧
+ *
+ * 逐帧循环由 anime.js 的 Timer 驱动（不再自己写 requestAnimationFrame）：
+ * 与页面其他动画共用同一个引擎和帧调度，页面里只剩一套时间源。
  */
 export default function ParticleBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -29,7 +33,6 @@ export default function ParticleBackground() {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const darkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
 
-    let raf = 0
     let particles: Particle[] = []
     const pointer = { x: -9999, y: -9999 }
 
@@ -96,11 +99,6 @@ export default function ParticleBackground() {
       }
     }
 
-    const loop = (t: number) => {
-      drawFrame(t)
-      raf = requestAnimationFrame(loop)
-    }
-
     const onPointer = (e: PointerEvent) => {
       pointer.x = e.clientX
       pointer.y = e.clientY
@@ -115,14 +113,18 @@ export default function ParticleBackground() {
     window.addEventListener('pointermove', onPointer, { passive: true })
     window.addEventListener('pointerleave', onLeave)
 
+    let timer: Timer | null = null
     if (reducedMotion) {
-      drawFrame(0) // 静态一帧
+      drawFrame(performance.now()) // 静态一帧
     } else {
-      raf = requestAnimationFrame(loop)
+      timer = createTimer({
+        loop: true,
+        onUpdate: () => drawFrame(performance.now()),
+      })
     }
 
     return () => {
-      cancelAnimationFrame(raf)
+      timer?.cancel()
       window.removeEventListener('resize', resize)
       window.removeEventListener('pointermove', onPointer)
       window.removeEventListener('pointerleave', onLeave)
